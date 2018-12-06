@@ -1,0 +1,322 @@
+#include <iostream>
+#include <vector>
+#include <fstream>
+#include <stdlib.h>
+#include <sstream>
+#include <string.h>
+
+class threeTuple{
+  public:
+	double p[3];
+	
+	std::string name;
+  
+	threeTuple() : name() { zero(); }
+	
+	threeTuple(const double &x_, const double &y_, const double &z_) : name() { p[0] = x_; p[1] = y_; p[2] = z_; }
+	
+	threeTuple(const std::string &str_); 
+	
+	bool operator == (const threeTuple &other) const { return (p[0]==other.p[0] && p[1]==other.p[1] && p[2]==other.p[2]); }
+	
+	std::string print() const ;
+	
+	void zero(){ p[0] = 0; p[1] = 0; p[2] = 0; }
+};
+
+threeTuple::threeTuple(const std::string &str_) : name() {
+	zero();
+	size_t index1, index2=0;
+	std::string substr;
+	for(size_t i = 0; i < 3; i++){
+		index1 = str_.find_first_not_of(' ', index2);
+		if(index1 == std::string::npos) break;
+		index2 = str_.find_first_of(' ', index1);
+		if(index2 == std::string::npos)
+			substr = str_.substr(index1);
+		else
+			substr = str_.substr(index1, index2-index1);
+		p[i] = strtod(substr.c_str(), NULL);
+	}
+}
+
+std::string threeTuple::print() const {
+	std::stringstream stream;
+	stream << "<position name=\"" << name << "\" unit=\"mm\" x=\"" << p[0] << "\" y=\"" << p[1] << "\" z=\"" << p[2] << "\"/>";
+	return stream.str();
+}
+
+class facet{
+  public:
+	threeTuple normal;
+	threeTuple vertices[3];
+	
+	std::string names[3];
+	
+	bool good;
+	
+	size_t vertex;
+	
+	facet() : good(false), vertex(0) { }
+	
+	facet(const std::vector<std::string> &block);
+
+	bool readBlock(const std::vector<std::string> &block);
+	
+	bool checkNames() const ;
+	
+	std::string print() const ;
+};
+
+facet::facet(const std::vector<std::string> &block){
+	this->readBlock(block);
+}
+
+bool facet::readBlock(const std::vector<std::string> &block){
+	vertex = 0;
+	size_t index;
+	for(std::vector<std::string>::const_iterator iter = block.begin(); iter != block.end(); iter++){
+		index = iter->find("normal");
+		if(index != std::string::npos){ // Normal vector
+			normal = threeTuple(iter->substr(index+6));
+		}
+		index = iter->find("vertex");
+		if(index != std::string::npos){ // Vertex vector
+			if(vertex >= 3)
+				return false;
+			vertices[vertex++] = threeTuple(iter->substr(index+6));
+		}
+	}
+	good = (vertex == 3);
+	return good;
+}
+
+bool facet::checkNames() const {
+	return (!names[0].empty() && !names[1].empty() && !names[2].empty());
+}
+
+std::string facet::print() const {
+	std::stringstream stream;
+	stream << "<triangular vertex1=\"" << names[0] << "\" vertex2=\"" << names[1] << "\" vertex3=\"" << names[2] << "\"/>";
+	return stream.str();
+}
+
+unsigned int readAST(const char *fname, std::vector<facet> &solid){
+	std::ifstream file(fname);
+	if(!file.good())
+		return 0;
+	
+	solid.clear();
+	std::vector<std::string> block;
+	
+	unsigned int linesRead = 0;
+	
+	std::string line;
+	while(true){
+		std::getline(file, line);
+		if(file.eof()) break;
+	
+		linesRead++;
+	
+		// Read a new facet (triangle).
+		if(line.find("endfacet") != std::string::npos){ // Finalize the facet.
+			block.push_back(line);
+			facet triangle(block);
+			if(triangle.good)
+				solid.push_back(triangle);
+			block.clear();
+		}
+		else{
+			block.push_back(line);
+		}
+	}
+
+	file.close();
+	
+	return linesRead;
+}
+
+bool isInVector(const threeTuple &tuple, const std::vector<threeTuple> &solid){
+	for(std::vector<threeTuple>::const_iterator iter = solid.begin(); iter != solid.end(); iter++){	
+		if(tuple == (*iter)) return true;
+	}
+	return false;
+}
+
+void generateHeader(std::ostream &ofile){
+	ofile << "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"no\" ?>\n";
+	ofile << "<gdml xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" xsi:noNamespaceSchemaLocation=\"http://service-spi.web.cern.ch/service-spi/app/releases/GDML/schema/gdml.xsd\">\n\n";
+}
+
+unsigned int generateUniqueVertices(std::ostream &ofile, std::vector<facet> &solid){
+	std::vector<threeTuple> unique;
+	for(std::vector<facet>::iterator iter = solid.begin(); iter != solid.end(); iter++){	
+		for(int i = 0; i < 3; i++){
+			if(!isInVector(iter->vertices[i], unique)){ // Add it to the vector
+				std::stringstream stream;
+				stream << "v" << unique.size();
+				threeTuple vec(iter->vertices[i]);
+				vec.name = stream.str();
+				unique.push_back(vec);
+			}
+		}
+	}
+
+	ofile << "    <define>\n";
+
+	for(size_t j = 0; j < unique.size(); j++){
+		ofile << "             " << unique[j].print() << std::endl;
+	}
+
+	ofile << "    </define>\n\n";
+	
+	// Match all facet vertices with one of the unique vertices.
+	for(std::vector<facet>::iterator iter = solid.begin(); iter != solid.end(); iter++){	
+		for(size_t i = 0; i < 3; i++){
+			for(size_t j = 0; j < unique.size(); j++){
+				if(iter->vertices[i] == unique[j]){
+					iter->names[i] = unique[j].name;
+					break;
+				}
+			}
+		}
+	}
+
+	ofile << "    <solids>\n";
+	ofile << "        <tessellated aunit=\"deg\" lunit=\"mm\" name=\"Thingy\">\n";
+
+	// Print the triangular definitions to the output file.
+	for(std::vector<facet>::iterator iter = solid.begin(); iter != solid.end(); iter++){
+		if(!iter->checkNames()){
+			std::cout << " ERROR\n";
+		}
+		else{
+			ofile << "             " << iter->print() << std::endl;
+		}
+	}
+	
+	ofile << "        </tessellated>\n";
+	ofile << "    </solids>\n\n";
+	
+	return unique.size();
+}
+
+void generateFooter(std::ostream &ofile){
+	ofile << "    <structure>\n";
+	ofile << "        <volume name=\"FILENAME.AST\">\n";
+	ofile << "            <materialref ref=\"Vacuum\"/>\n";
+	ofile << "            <solidref ref=\"Thingy\"/>\n";
+	ofile << "        </volume>\n";
+	ofile << "    </structure>\n\n";
+
+	ofile << "    <setup name=\"Default\" version=\"1.0\">\n";
+	ofile << "        <world ref=\"FILENAME.AST\"/>\n";
+	ofile << "    </setup>\n";
+	ofile << "</gdml>\n";
+}
+
+void generateMasterFileHeader(std::ofstream &ofile, const double &x=10000.0, const double &y=10000.0, const double &z=10000.0){
+	generateHeader(ofile);
+	ofile << "    <materials>\n";
+	ofile << "        <!--          -->\n";
+	ofile << "        <!-- elements -->\n";
+	ofile << "        <!--          -->\n";
+	ofile << "        <element name=\"videRef\" formula=\"VACUUM\" Z=\"1\"> <atom value=\"1.\"/> </element>\n\n";
+
+	ofile << "        <!--          -->\n";
+	ofile << "        <!-- vacuum   -->\n";
+	ofile << "        <!--          -->\n";
+	ofile << "        <material formula=\" \" name=\"Vacuum\">\n";
+	ofile << "            <D value=\"1.e-25\" unit=\"g/cm3\"/>\n";
+	ofile << "            <fraction n=\"1.0\" ref=\"videRef\"/>\n";
+	ofile << "        </material>\n";
+	ofile << "    </materials>\n\n";
+
+	ofile << "    <solids>\n";
+	ofile << "        <box lunit=\"mm\" name=\"world_solid\" x=\"" << x << "\" y=\"" << y << "\" z=\"" << z << "\"/>\n";
+	ofile << "    </solids>\n\n";
+
+	ofile << "    <structure>\n";
+	ofile << "        <volume name=\"world_volume\">\n";
+	ofile << "            <materialref ref=\"Vacuum\"/>\n";
+	ofile << "            <solidref ref=\"world_solid\"/>\n\n";
+}
+
+void generateMasterFileGDML(std::ofstream &ofile, const std::string &filename){
+	// <file name="/path/to/file/file.gdml"/>
+	ofile << "            <physvol>\n";
+	ofile << "                <file name=\"" << filename << "\"/>\n";
+	ofile << "            </physvol>\n\n";
+}
+
+void generateMasterFileFooter(std::ofstream &ofile){
+	ofile << "        </volume>\n";
+	ofile << "    </structure>\n\n";
+
+	ofile << "    <setup name=\"Default\" version=\"1.0\">\n";
+	ofile << "        <world ref=\"world_volume\"/>\n";
+	ofile << "    </setup>\n";
+	ofile << "</gdml>\n";
+}
+
+void help(char * prog_name_){
+	std::cout << "  SYNTAX: " << prog_name_ << " <output> <input> [input2 input3 ...]\n";
+}
+
+int main(int argc, char* argv[]){
+	if(argc > 1 && (strcmp(argv[1], "-h") == 0 || strcmp(argv[1], "--help") == 0)){
+		help(argv[0]);
+		return 1;
+	}
+	else if(argc < 3){
+		std::cout << " Error: Invalid number of arguments to " << argv[0] << ". Expected 2, received " << argc-1 << ".\n";
+		help(argv[0]);
+		return 1;
+	}
+	
+	std::string outputFilename(argv[1]);
+
+	std::vector<std::string> inputFilenames;
+	for(int i = 2; i < argc; i++){
+		inputFilenames.push_back(std::string(argv[i]));
+	}
+	
+	if(inputFilenames.empty()){
+		return 1;
+	}
+
+	std::ofstream masterFile(outputFilename.c_str());
+	generateMasterFileHeader(masterFile);
+
+	for(std::vector<std::string>::iterator iter = inputFilenames.begin(); iter != inputFilenames.end(); iter++){
+		std::string gdmlFilename = (*iter);
+		size_t index = gdmlFilename.find_last_of('.');
+		if(index != std::string::npos)
+			gdmlFilename = iter->substr(0, index) + ".gdml";
+			
+		std::cout << " Processing file \"" << (*iter) << "\"\n";
+		
+		std::vector<facet> solid;
+		unsigned int lines = readAST(iter->c_str(), solid);
+		std::cout << "  Read " << lines << " lines and " << solid.size() << " polygons\n";
+		
+		std::ofstream ofile(gdmlFilename.c_str());
+		generateHeader(ofile);
+		
+		std::cout << "  Identified " << generateUniqueVertices(ofile, solid) << " unique vertices\n";
+		
+		generateFooter(ofile);
+		ofile.close();
+
+		std::cout << "  Generated output file \"" << gdmlFilename << "\"\n";
+		
+		generateMasterFileGDML(masterFile, gdmlFilename);
+	}
+	
+	generateMasterFileFooter(masterFile);
+	masterFile.close();
+
+	std::cout << " Generated master output file \"" << outputFilename << "\"\n";
+
+	return 0;
+}
