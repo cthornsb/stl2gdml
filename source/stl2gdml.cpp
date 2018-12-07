@@ -5,6 +5,13 @@
 #include <sstream>
 #include <string.h>
 
+const double in = 25.4;
+const double ft = 304.8;
+const double m = 1000;
+const double dm = 100;
+const double cm = 10;
+const double mm = 1;
+
 class threeTuple{
   public:
 	double p[3];
@@ -18,6 +25,8 @@ class threeTuple{
 	threeTuple(const std::string &str_); 
 	
 	bool operator == (const threeTuple &other) const { return (p[0]==other.p[0] && p[1]==other.p[1] && p[2]==other.p[2]); }
+	
+	void operator *= (const double &val){ p[0] *= val; p[1] *= val; p[2] *= val; }
 	
 	std::string print() const ;
 	
@@ -56,6 +65,8 @@ class stlBlock{
 	stlBlock(){ }
 
 	stlBlock(float *array, const unsigned short &att=0);
+	
+	void operator *= (const double &val);
 };
 
 stlBlock::stlBlock(float *array, const unsigned short &att/*=0*/){
@@ -64,6 +75,12 @@ stlBlock::stlBlock(float *array, const unsigned short &att/*=0*/){
 		vertices[i-1] = threeTuple(array[3*i], array[3*i+1], array[3*i+2]);
 	}
 	attribute = att;
+}
+
+void stlBlock::operator *= (const double &val){
+	for(size_t i = 0; i < 3; i++){
+		vertices[i] *= val;
+	}
 }
 
 class facet : public stlBlock {
@@ -76,7 +93,7 @@ class facet : public stlBlock {
 	
 	facet() : stlBlock(), good(false), vertex(0) { }
 
-	facet(const stlBlock &block) : stlBlock(block) { }
+	facet(const stlBlock &block) : stlBlock(block), good(true), vertex(3) { }
 	
 	facet(const std::vector<std::string> &block);
 
@@ -120,7 +137,7 @@ std::string facet::print() const {
 	return stream.str();
 }
 
-unsigned int readAST(const char *fname, std::vector<facet> &solid){
+unsigned int readAST(const char *fname, std::vector<facet> &solid, const double &unit=mm){
 	std::ifstream file(fname);
 	if(!file.good())
 		return 0;
@@ -141,8 +158,10 @@ unsigned int readAST(const char *fname, std::vector<facet> &solid){
 		if(line.find("endfacet") != std::string::npos){ // Finalize the facet.
 			block.push_back(line);
 			facet triangle(block);
-			if(triangle.good)
+			if(triangle.good){
+				triangle *= unit;
 				solid.push_back(triangle);
+			}
 			block.clear();
 		}
 		else{
@@ -155,7 +174,7 @@ unsigned int readAST(const char *fname, std::vector<facet> &solid){
 	return linesRead;
 }
 
-unsigned int readSTL(const char *fname, std::vector<facet> &solid){
+unsigned int readSTL(const char *fname, std::vector<facet> &solid, const double &unit=mm){
 	unsigned char header[80];
 	unsigned int nTriangles;
 
@@ -172,7 +191,7 @@ unsigned int readSTL(const char *fname, std::vector<facet> &solid){
 
 	solid.clear();
 	bool invalidRead = false;
-	for(unsigned int triangle = 0; triangle < nTriangles; triangle++){
+	for(unsigned int i = 0; i < nTriangles; i++){
 		file.read((char*)vect, 48);
 		file.read((char*)&att, 2);
 		if(file.eof()){
@@ -180,7 +199,9 @@ unsigned int readSTL(const char *fname, std::vector<facet> &solid){
 			break;
 		}
 		stlBlock block(vect, att);
-		solid.push_back(facet(block));
+		facet triangle(block);
+		triangle *= unit;
+		solid.push_back(triangle);
 	}
 	
 	file.close();	
@@ -317,6 +338,9 @@ void generateMasterFileFooter(std::ofstream &ofile){
 
 void help(char * prog_name_){
 	std::cout << "  SYNTAX: " << prog_name_ << " <output> <input> [input2 input3 ...]\n";
+	std::cout << "   Available options:\n";
+	std::cout << "    --help (-h)              | Display this dialogue.\n";
+	std::cout << "    --unit <unit>            | Specify the name of the size unit [e.g. in, ft, m, dm, cm, mm] (default is mm).\n";
 }
 
 int main(int argc, char* argv[]){
@@ -330,16 +354,55 @@ int main(int argc, char* argv[]){
 		return 1;
 	}
 	
-	std::string outputFilename(argv[1]);
-
+	std::string outputFilename;
 	std::vector<std::string> inputFilenames;
-	for(int i = 2; i < argc; i++){
-		inputFilenames.push_back(std::string(argv[i]));
+	double drawingUnit = mm;
+
+	int argCount = 1;
+	int index = 1;
+	while(index < argc){
+		if(strcmp(argv[index], "--unit") == 0){
+			if(index + 1 >= argc){
+				std::cout << " Error: Missing required argument to '--unit'!\n";
+				help(argv[0]);
+				return 1;
+			}
+			std::string arg(argv[++index]);
+			if(arg == "in")
+				drawingUnit = in;
+			else if(arg == "ft")
+				drawingUnit = ft;
+			else if(arg == "m")
+				drawingUnit = m;
+			else if(arg == "dm")
+				drawingUnit = dm;
+			else if(arg == "cm")
+				drawingUnit = cm;
+			else if(arg == "mm")
+				drawingUnit = mm;
+			else{
+				std::cout << " Error: Invalid size unit (" << arg << ")!\n";
+				return 2;
+			}
+		}
+		else if(argCount++ == 1)
+			outputFilename = std::string(argv[index]);
+		else
+			inputFilenames.push_back(std::string(argv[index]));
+		index++;
 	}
 	
-	if(inputFilenames.empty()){
-		return 1;
+	if(outputFilename.empty()){ // Check for missing output filename.
+		std::cout << " Error: No output filename specified!\n";
+		return 3;
 	}
+
+	if(inputFilenames.empty()){ // Check for missing input filenames.
+		std::cout << " Error: No input filename(s) specified!\n";
+		return 4;
+	}
+
+	std::cout << " Using 1 size unit = " << drawingUnit << " mm.\n";
 
 	std::ofstream masterFile(outputFilename.c_str());
 	generateMasterFileHeader(masterFile);
@@ -357,13 +420,13 @@ int main(int argc, char* argv[]){
 		
 		std::vector<facet> solid;
 		if(extension == "stl"){ // Binary STL file
-			readSTL(iter->c_str(), solid);
+			readSTL(iter->c_str(), solid, drawingUnit);
 			std::cout << "  Read " << solid.size() << " polygons\n";
 		}
 		else{
 			if(extension != "ast")
 				std::cout << " Warning: Unknown file type (" << extension << "), assuming AST format.\n";
-			unsigned int lines = readAST(iter->c_str(), solid);
+			unsigned int lines = readAST(iter->c_str(), solid, drawingUnit);
 			std::cout << "  Read " << lines << " lines and " << solid.size() << " polygons\n";
 		}
 		
