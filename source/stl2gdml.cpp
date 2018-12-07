@@ -220,12 +220,29 @@ bool isInVector(const threeTuple &tuple, const std::vector<threeTuple> &solid){
 	return false;
 }
 
-void generateHeader(std::ostream &ofile){
+class geantGdmlFile{
+  public:
+	geantGdmlFile(){ }
+  
+	void generateHeader(std::ostream &ofile);
+
+	unsigned int generateUniqueVertices(std::ostream &ofile, std::vector<facet> &solid, const std::string &name, const int &id);
+
+	void generateFooter(std::ostream &ofile, const std::string &name);
+
+	void generateMasterFileHeader(std::ofstream &ofile, const double &x=10000.0, const double &y=10000.0, const double &z=10000.0);
+
+	void generateMasterFileGDML(std::ofstream &ofile, const std::string &filename);
+
+	void generateMasterFileFooter(std::ofstream &ofile);
+};
+
+void geantGdmlFile::generateHeader(std::ostream &ofile){
 	ofile << "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"no\" ?>\n";
 	ofile << "<gdml xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" xsi:noNamespaceSchemaLocation=\"http://service-spi.web.cern.ch/service-spi/app/releases/GDML/schema/gdml.xsd\">\n\n";
 }
 
-unsigned int generateUniqueVertices(std::ostream &ofile, std::vector<facet> &solid, const std::string &name, const int &id){
+unsigned int geantGdmlFile::generateUniqueVertices(std::ostream &ofile, std::vector<facet> &solid, const std::string &name, const int &id){
 	std::vector<threeTuple> unique;
 	for(std::vector<facet>::iterator iter = solid.begin(); iter != solid.end(); iter++){	
 		for(int i = 0; i < 3; i++){
@@ -278,7 +295,7 @@ unsigned int generateUniqueVertices(std::ostream &ofile, std::vector<facet> &sol
 	return unique.size();
 }
 
-void generateFooter(std::ostream &ofile, const std::string &name){
+void geantGdmlFile::generateFooter(std::ostream &ofile, const std::string &name){
 	ofile << "    <structure>\n";
 	ofile << "        <volume name=\"" << name << ".gdml\">\n";
 	ofile << "            <materialref ref=\"Vacuum\"/>\n";
@@ -292,7 +309,7 @@ void generateFooter(std::ostream &ofile, const std::string &name){
 	ofile << "</gdml>\n";
 }
 
-void generateMasterFileHeader(std::ofstream &ofile, const double &x=10000.0, const double &y=10000.0, const double &z=10000.0){
+void geantGdmlFile::generateMasterFileHeader(std::ofstream &ofile, const double &x/*=10000.0*/, const double &y/*=10000.0*/, const double &z/*=10000.0*/){
 	generateHeader(ofile);
 	ofile << "    <materials>\n";
 	ofile << "        <!--          -->\n";
@@ -319,14 +336,14 @@ void generateMasterFileHeader(std::ofstream &ofile, const double &x=10000.0, con
 	ofile << "            <solidref ref=\"world_solid\"/>\n\n";
 }
 
-void generateMasterFileGDML(std::ofstream &ofile, const std::string &filename){
+void geantGdmlFile::generateMasterFileGDML(std::ofstream &ofile, const std::string &filename){
 	// <file name="/path/to/file/file.gdml"/>
 	ofile << "            <physvol>\n";
 	ofile << "                <file name=\"" << filename << "\"/>\n";
 	ofile << "            </physvol>\n\n";
 }
 
-void generateMasterFileFooter(std::ofstream &ofile){
+void geantGdmlFile::generateMasterFileFooter(std::ofstream &ofile){
 	ofile << "        </volume>\n";
 	ofile << "    </structure>\n\n";
 
@@ -404,8 +421,10 @@ int main(int argc, char* argv[]){
 
 	std::cout << " Using 1 size unit = " << drawingUnit << " mm.\n";
 
+	geantGdmlFile handler;
+
 	std::ofstream masterFile(outputFilename.c_str());
-	generateMasterFileHeader(masterFile);
+	handler.generateMasterFileHeader(masterFile);
 
 	int solidCount = 0;
 	for(std::vector<std::string>::iterator iter = inputFilenames.begin(); iter != inputFilenames.end(); iter++){
@@ -431,7 +450,7 @@ int main(int argc, char* argv[]){
 			readSTL(iter->c_str(), solid, drawingUnit);
 			std::cout << "  Read " << solid.size() << " polygons\n";
 		}
-		else{
+		else{ // Ascii STL file
 			if(extension != "ast")
 				std::cout << " Warning: Unknown file type (" << extension << "), assuming AST format.\n";
 			unsigned int lines = readAST(iter->c_str(), solid, drawingUnit);
@@ -439,19 +458,19 @@ int main(int argc, char* argv[]){
 		}
 		
 		std::ofstream ofile(gdmlFilename.c_str());
-		generateHeader(ofile);
+		handler.generateHeader(ofile);
 		
-		std::cout << "  Identified " << generateUniqueVertices(ofile, solid, solidName, solidCount++) << " unique vertices\n";
+		std::cout << "  Identified " << handler.generateUniqueVertices(ofile, solid, solidName, solidCount++) << " unique vertices\n";
 		
-		generateFooter(ofile, solidName);
+		handler.generateFooter(ofile, solidName);
 		ofile.close();
 
 		std::cout << "  Generated output file \"" << gdmlFilename << "\"\n";
 		
-		generateMasterFileGDML(masterFile, gdmlFilename);
+		handler.generateMasterFileGDML(masterFile, gdmlFilename);
 	}
 	
-	generateMasterFileFooter(masterFile);
+	handler.generateMasterFileFooter(masterFile);
 	masterFile.close();
 
 	std::cout << " Generated master output file \"" << outputFilename << "\"\n";
