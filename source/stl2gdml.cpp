@@ -46,18 +46,37 @@ std::string threeTuple::print() const {
 	return stream.str();
 }
 
-class facet{
+class stlBlock{
   public:
 	threeTuple normal;
 	threeTuple vertices[3];
-	
+
+	unsigned short attribute;
+
+	stlBlock(){ }
+
+	stlBlock(float *array, const unsigned short &att=0);
+};
+
+stlBlock::stlBlock(float *array, const unsigned short &att/*=0*/){
+	normal = threeTuple(array[0], array[1], array[2]);
+	for(size_t i = 1; i < 4; i++){
+		vertices[i-1] = threeTuple(array[3*i], array[3*i+1], array[3*i+2]);
+	}
+	attribute = att;
+}
+
+class facet : public stlBlock {
+  public:
 	std::string names[3];
 	
 	bool good;
 	
 	size_t vertex;
 	
-	facet() : good(false), vertex(0) { }
+	facet() : stlBlock(), good(false), vertex(0) { }
+
+	facet(const stlBlock &block) : stlBlock(block) { }
 	
 	facet(const std::vector<std::string> &block);
 
@@ -68,7 +87,7 @@ class facet{
 	std::string print() const ;
 };
 
-facet::facet(const std::vector<std::string> &block){
+facet::facet(const std::vector<std::string> &block) : stlBlock() {
 	this->readBlock(block);
 }
 
@@ -134,6 +153,43 @@ unsigned int readAST(const char *fname, std::vector<facet> &solid){
 	file.close();
 	
 	return linesRead;
+}
+
+unsigned int readSTL(const char *fname, std::vector<facet> &solid){
+	unsigned char header[80];
+	unsigned int nTriangles;
+
+	std::ifstream file(fname, std::ios::binary);
+	if(!file.good()){
+		return 0;
+	}
+	
+	file.read((char*)header, 80);
+	file.read((char*)&nTriangles, 4);
+
+	float vect[12];
+	unsigned short att;
+
+	solid.clear();
+	bool invalidRead = false;
+	for(unsigned int triangle = 0; triangle < nTriangles; triangle++){
+		file.read((char*)vect, 48);
+		file.read((char*)&att, 2);
+		if(file.eof()){
+			invalidRead = true;
+			break;
+		}
+		stlBlock block(vect, att);
+		solid.push_back(facet(block));
+	}
+	
+	file.close();	
+	
+	if(invalidRead){
+		std::cout << " Warning: Failed to read all " << nTriangles << " triangles specified in header!\n";
+	}
+	
+	return solid.size();
 }
 
 bool isInVector(const threeTuple &tuple, const std::vector<threeTuple> &solid){
@@ -290,15 +346,26 @@ int main(int argc, char* argv[]){
 
 	for(std::vector<std::string>::iterator iter = inputFilenames.begin(); iter != inputFilenames.end(); iter++){
 		std::string gdmlFilename = (*iter);
+		std::string extension = "";
 		size_t index = gdmlFilename.find_last_of('.');
-		if(index != std::string::npos)
+		if(index != std::string::npos){
 			gdmlFilename = iter->substr(0, index) + ".gdml";
+			extension = iter->substr(index+1);
+		}
 			
 		std::cout << " Processing file \"" << (*iter) << "\"\n";
 		
 		std::vector<facet> solid;
-		unsigned int lines = readAST(iter->c_str(), solid);
-		std::cout << "  Read " << lines << " lines and " << solid.size() << " polygons\n";
+		if(extension == "stl"){ // Binary STL file
+			readSTL(iter->c_str(), solid);
+			std::cout << "  Read " << solid.size() << " polygons\n";
+		}
+		else{
+			if(extension != "ast")
+				std::cout << " Warning: Unknown file type (" << extension << "), assuming AST format.\n";
+			unsigned int lines = readAST(iter->c_str(), solid);
+			std::cout << "  Read " << lines << " lines and " << solid.size() << " polygons\n";
+		}
 		
 		std::ofstream ofile(gdmlFilename.c_str());
 		generateHeader(ofile);
