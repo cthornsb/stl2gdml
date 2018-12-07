@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <sstream>
 #include <string.h>
+#include <algorithm>
 
 const double in = 25.4;
 const double ft = 304.8;
@@ -137,7 +138,96 @@ std::string facet::print() const {
 	return stream.str();
 }
 
-unsigned int readAST(const char *fname, std::vector<facet> &solid, const double &unit=mm){
+class polySolid{
+  public:
+	polySolid(){ initialize(); }
+
+	size_t size() const { return solid.size(); }
+
+	void getSizeX(double &min, double &max) const ;
+
+	void getSizeY(double &min, double &max) const ;
+
+	void getSizeZ(double &min, double &max) const ;
+
+	void getUniqueVertices(std::vector<threeTuple> &unique, const int &id);
+	
+	std::vector<facet>::iterator begin(){ return solid.begin(); }
+	
+	std::vector<facet>::iterator end(){ return solid.end(); }
+	
+	void add(const facet &poly);
+	
+	void clear();
+  
+  private:
+	std::vector<facet> solid;
+	
+	double rmin[3];
+	double rmax[3];
+	
+	void initialize();
+	
+	bool isInVector(const threeTuple &tuple, const std::vector<threeTuple> &solid);
+};
+
+void polySolid::getSizeX(double &min, double &max) const {
+	min = rmin[0]; max = rmax[0];
+}
+
+void polySolid::getSizeY(double &min, double &max) const {
+	min = rmin[1]; max = rmax[1];
+}
+
+void polySolid::getSizeZ(double &min, double &max) const {
+	min = rmin[2]; max = rmax[2];
+}
+
+void polySolid::getUniqueVertices(std::vector<threeTuple> &unique, const int &id){
+	for(std::vector<facet>::iterator iter = solid.begin(); iter != solid.end(); iter++){	
+		for(size_t i = 0; i < 3; i++){
+			if(!isInVector(iter->vertices[i], unique)){ // Add it to the vector
+				std::stringstream stream;
+				stream << "v" << id << "_" << unique.size();
+				threeTuple vec(iter->vertices[i]);
+				vec.name = stream.str();
+				unique.push_back(vec);
+			}
+		}
+	}
+}
+
+void polySolid::add(const facet &poly){ 
+	solid.push_back(poly); 
+	for(size_t i = 0; i < 3; i++){
+		threeTuple vec(poly.vertices[i]);
+		for(size_t j = 0; j < 3; j++){
+			if(vec.p[j] < rmin[j]) rmin[j] = vec.p[j];
+			if(vec.p[j] > rmax[j]) rmax[j] = vec.p[j];
+		}
+	}
+}
+
+void polySolid::clear(){ 
+	solid.clear(); 
+	initialize();
+}
+
+void polySolid::initialize(){ 
+	for(size_t i = 0; i < 3; i++){
+		rmin[i] = 1E10;
+		rmax[i] = -1E10;
+	}
+}
+
+bool polySolid::isInVector(const threeTuple &tuple, const std::vector<threeTuple> &solid){
+	for(std::vector<threeTuple>::const_iterator iter = solid.begin(); iter != solid.end(); iter++){	
+		if(tuple == (*iter)) return true;
+	}
+	return false;
+}
+
+unsigned int readAST(const char *fname, polySolid &solid, const double &unit=mm){
 	std::ifstream file(fname);
 	if(!file.good())
 		return 0;
@@ -160,7 +250,7 @@ unsigned int readAST(const char *fname, std::vector<facet> &solid, const double 
 			facet triangle(block);
 			if(triangle.good){
 				triangle *= unit;
-				solid.push_back(triangle);
+				solid.add(triangle);
 			}
 			block.clear();
 		}
@@ -174,7 +264,7 @@ unsigned int readAST(const char *fname, std::vector<facet> &solid, const double 
 	return linesRead;
 }
 
-unsigned int readSTL(const char *fname, std::vector<facet> &solid, const double &unit=mm){
+unsigned int readSTL(const char *fname, polySolid &solid, const double &unit=mm){
 	unsigned char header[80];
 	unsigned int nTriangles;
 
@@ -201,7 +291,7 @@ unsigned int readSTL(const char *fname, std::vector<facet> &solid, const double 
 		stlBlock block(vect, att);
 		facet triangle(block);
 		triangle *= unit;
-		solid.push_back(triangle);
+		solid.add(triangle);
 	}
 	
 	file.close();	
@@ -213,26 +303,34 @@ unsigned int readSTL(const char *fname, std::vector<facet> &solid, const double 
 	return solid.size();
 }
 
-bool isInVector(const threeTuple &tuple, const std::vector<threeTuple> &solid){
-	for(std::vector<threeTuple>::const_iterator iter = solid.begin(); iter != solid.end(); iter++){	
-		if(tuple == (*iter)) return true;
-	}
-	return false;
+class gdmlEntry{
+  public:
+	std::string filename;
+	std::string solidName;
+	threeTuple physSize;
+	threeTuple offset;
+	
+	gdmlEntry(){ }
+	
+	gdmlEntry(const std::string &fname_, const std::string &sname_, const threeTuple &size_) : filename(fname_), solidName(sname_), physSize(size_) { }
+	
+	void computeOffset(const double &sizeX_, const double &sizeY_, const double &sizeZ_);
+};
+
+void gdmlEntry::computeOffset(const double &sizeX_, const double &sizeY_, const double &sizeZ_){
+	double xoffset = -sizeX_/2 + (sizeX_ - physSize.p[0])/2;
+	double yoffset = -sizeY_/2 + (sizeY_ - physSize.p[1])/2;
+	double zoffset = -sizeZ_/2 + (sizeZ_ - physSize.p[2])/2;
+	offset = threeTuple(xoffset, yoffset, zoffset);
 }
 
 class geantGdmlFile{
   public:
 	geantGdmlFile() : solidCount(0), drawingUnit(mm) { }
 
-	geantGdmlFile(const std::string &filename) : solidCount(0), drawingUnit(mm) { open(filename); }
-
 	void setDrawingUnit(const double &unit){ drawingUnit = unit; }
 
-	bool open(const std::string &filename);
-	
-	bool processFile(const std::string &filename);
-
-	void close();
+	bool process(const std::string &outputFilename, const std::vector<std::string> &filenames);
   
   private:
 	int solidCount;
@@ -240,32 +338,42 @@ class geantGdmlFile{
 	double drawingUnit;
   
 	std::ofstream ofile;
-	std::ofstream masterFile;
+
+	double rmin[3];
+	double rmax[3];
+
+	std::vector<gdmlEntry> goodFiles; // List of good gdml files.
 	
-	std::vector<facet> solid;
-	
-	void generateHeader();
+	polySolid solid;
 
-	unsigned int generateUniqueVertices(const std::string &name, const int &id);
+	bool processFile(const std::string &filename);
 
-	void generateFooter(const std::string &name);
+	unsigned int generateUniqueVertices(const std::string &name, threeTuple &size);
 
-	void generateMasterFileHeader(const double &x=10000.0, const double &y=10000.0, const double &z=10000.0);
-
-	void generateMasterFileGDML(const std::string &filename);
-
-	void generateMasterFileFooter();
+	bool generateMasterFile(const std::string &outputFilename);
 };
 
-bool geantGdmlFile::open(const std::string &filename){
-	masterFile.open(filename.c_str());
-	if(!masterFile.good())
-		return false;
-	generateMasterFileHeader();
+bool geantGdmlFile::process(const std::string &outputFilename, const std::vector<std::string> &filenames){
+	for(size_t i = 0; i < 3; i++){
+		rmin[i] = 1E10;
+		rmax[i] = -1E10;
+	}
+
+	goodFiles.clear();
+
+	std::string gdmlFilename;
+	for(std::vector<std::string>::const_iterator iter = filenames.begin(); iter != filenames.end(); iter++){
+		if(processFile((*iter))){
+			std::cout << "  Generated output file \"" << gdmlFilename << "\"\n";
+		}
+	}
+	
+	generateMasterFile(outputFilename);
+	
 	return true;
 }
-
-bool geantGdmlFile::processFile(const std::string &filename){
+		
+bool geantGdmlFile::processFile(const std::string &filename){	
 	solid.clear();
 
 	std::string solidName = "Thingy";
@@ -300,48 +408,52 @@ bool geantGdmlFile::processFile(const std::string &filename){
 	if(!ofile.good())
 		return false;
 	
-	generateHeader();
+	ofile << "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"no\" ?>\n";
+	ofile << "<gdml xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" xsi:noNamespaceSchemaLocation=\"http://service-spi.web.cern.ch/service-spi/app/releases/GDML/schema/gdml.xsd\">\n\n";
 	
-	std::cout << "  Identified " << generateUniqueVertices(solidName, solidCount++) << " unique vertices\n";
+	threeTuple physicalSize;
+	std::cout << "  Identified " << generateUniqueVertices(solidName, physicalSize) << " unique vertices\n";
 	
-	generateFooter(solidName);
-	ofile.close();
+	ofile << "    <structure>\n";
+	ofile << "        <volume name=\"" << solidName << ".gdml\">\n";
+	ofile << "            <materialref ref=\"Vacuum\"/>\n";
+	ofile << "            <solidref ref=\"" << solidName << "\"/>\n";
+	ofile << "        </volume>\n";
+	ofile << "    </structure>\n\n";
 
-	std::cout << "  Generated output file \"" << gdmlFilename << "\"\n";
+	ofile << "    <setup name=\"Default\" version=\"1.0\">\n";
+	ofile << "        <world ref=\"" << solidName << ".gdml\"/>\n";
+	ofile << "    </setup>\n";
+	ofile << "</gdml>\n";
 	
-	generateMasterFileGDML(gdmlFilename);
+	ofile.close();
+	
+	goodFiles.push_back(gdmlEntry(gdmlFilename, solidName, physicalSize));
 	
 	return true;
 }
 
-void geantGdmlFile::close(){
-	generateMasterFileFooter();
-	masterFile.close();
-}
-
-void geantGdmlFile::generateHeader(){
-	ofile << "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"no\" ?>\n";
-	ofile << "<gdml xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" xsi:noNamespaceSchemaLocation=\"http://service-spi.web.cern.ch/service-spi/app/releases/GDML/schema/gdml.xsd\">\n\n";
-}
-
-unsigned int geantGdmlFile::generateUniqueVertices(const std::string &name, const int &id){
+unsigned int geantGdmlFile::generateUniqueVertices(const std::string &name, threeTuple &size){
 	std::vector<threeTuple> unique;
-	for(std::vector<facet>::iterator iter = solid.begin(); iter != solid.end(); iter++){	
-		for(int i = 0; i < 3; i++){
-			if(!isInVector(iter->vertices[i], unique)){ // Add it to the vector
-				std::stringstream stream;
-				stream << "v" << id << "_" << unique.size();
-				threeTuple vec(iter->vertices[i]);
-				vec.name = stream.str();
-				unique.push_back(vec);
-			}
-		}
+	solid.getUniqueVertices(unique, solidCount++);
+	
+	// Get the physical size of the solid.
+	double solidmin[3], solidmax[3];
+	solid.getSizeX(solidmin[0], solidmax[0]);
+	solid.getSizeY(solidmin[1], solidmax[1]);
+	solid.getSizeZ(solidmin[2], solidmax[2]);
+	
+	size = threeTuple(solidmax[0]-solidmin[0], solidmax[1]-solidmin[1], solidmax[2]-solidmin[2]);
+	
+	for(size_t i = 0; i < 3; i++){
+		rmin[i]	= std::min(rmin[i], solidmin[i]); 
+		rmax[i] = std::max(rmax[i], solidmax[i]);
 	}
-
+	
 	ofile << "    <define>\n";
 
-	for(size_t j = 0; j < unique.size(); j++){
-		ofile << "             " << unique[j].print() << std::endl;
+	for(size_t i = 0; i < unique.size(); i++){
+		ofile << "             " << unique[i].print() << std::endl;
 	}
 
 	ofile << "    </define>\n\n";
@@ -377,22 +489,27 @@ unsigned int geantGdmlFile::generateUniqueVertices(const std::string &name, cons
 	return unique.size();
 }
 
-void geantGdmlFile::generateFooter(const std::string &name){
-	ofile << "    <structure>\n";
-	ofile << "        <volume name=\"" << name << ".gdml\">\n";
-	ofile << "            <materialref ref=\"Vacuum\"/>\n";
-	ofile << "            <solidref ref=\"" << name << "\"/>\n";
-	ofile << "        </volume>\n";
-	ofile << "    </structure>\n\n";
-
-	ofile << "    <setup name=\"Default\" version=\"1.0\">\n";
-	ofile << "        <world ref=\"" << name << ".gdml\"/>\n";
-	ofile << "    </setup>\n";
-	ofile << "</gdml>\n";
-}
-
-void geantGdmlFile::generateMasterFileHeader(const double &x/*=10000.0*/, const double &y/*=10000.0*/, const double &z/*=10000.0*/){
-	generateHeader();
+bool geantGdmlFile::generateMasterFile(const std::string &outputFilename){ // Generate the master file.
+	std::ofstream masterFile(outputFilename.c_str());
+	if(!masterFile.good())
+		return false;
+		
+	masterFile << "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"no\" ?>\n";
+	masterFile << "<gdml xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" xsi:noNamespaceSchemaLocation=\"http://service-spi.web.cern.ch/service-spi/app/releases/GDML/schema/gdml.xsd\">\n\n";
+	
+	double worldSize[3];
+	for(size_t i = 0; i < 3; i++){
+		worldSize[i] = rmax[i]-rmin[i];
+	}
+	
+	masterFile << "    <define>\n";
+	for(std::vector<gdmlEntry>::iterator iter = goodFiles.begin(); iter != goodFiles.end(); iter++){
+		// <position name="offsetpos" unit="mm" x="19" y="0" z="19"/>
+		iter->computeOffset(worldSize[0], worldSize[1], worldSize[2]);
+		masterFile << "        <position name=\"" << iter->solidName << "_pos\" unit=\"mm\" x=\"" << iter->offset.p[0] << "\" y=\"" << iter->offset.p[1] << "\" z=\"" << iter->offset.p[2] << "\"/>\n";
+	}
+	masterFile << "    </define>\n\n";
+	
 	masterFile << "    <materials>\n";
 	masterFile << "        <!--          -->\n";
 	masterFile << "        <!-- elements -->\n";
@@ -409,23 +526,23 @@ void geantGdmlFile::generateMasterFileHeader(const double &x/*=10000.0*/, const 
 	masterFile << "    </materials>\n\n";
 
 	masterFile << "    <solids>\n";
-	masterFile << "        <box lunit=\"mm\" name=\"world_solid\" x=\"" << x << "\" y=\"" << y << "\" z=\"" << z << "\"/>\n";
+	masterFile << "        <box lunit=\"mm\" name=\"world_solid\" x=\"" << worldSize[0] << "\" y=\"" << worldSize[1] << "\" z=\"" << worldSize[2] << "\"/>\n";
 	masterFile << "    </solids>\n\n";
 
 	masterFile << "    <structure>\n";
 	masterFile << "        <volume name=\"world_volume\">\n";
 	masterFile << "            <materialref ref=\"Vacuum\"/>\n";
 	masterFile << "            <solidref ref=\"world_solid\"/>\n\n";
-}
-
-void geantGdmlFile::generateMasterFileGDML(const std::string &filename){
-	// <file name="/path/to/file/file.gdml"/>
-	masterFile << "            <physvol>\n";
-	masterFile << "                <file name=\"" << filename << "\"/>\n";
-	masterFile << "            </physvol>\n\n";
-}
-
-void geantGdmlFile::generateMasterFileFooter(){
+	
+	for(std::vector<gdmlEntry>::iterator iter = goodFiles.begin(); iter != goodFiles.end(); iter++){
+		// <file name="/path/to/file/file.gdml"/>
+		// <positionref ref="position"/>
+		masterFile << "            <physvol>\n";
+		masterFile << "                <file name=\"" << iter->filename << "\"/>\n";
+		masterFile << "                <positionref ref=\"" << iter->solidName << "_pos\"/>\n";
+		masterFile << "            </physvol>\n\n";
+	}
+	
 	masterFile << "        </volume>\n";
 	masterFile << "    </structure>\n\n";
 
@@ -433,6 +550,10 @@ void geantGdmlFile::generateMasterFileFooter(){
 	masterFile << "        <world ref=\"world_volume\"/>\n";
 	masterFile << "    </setup>\n";
 	masterFile << "</gdml>\n";
+	
+	masterFile.close();
+	
+	return true;
 }
 
 void help(char * prog_name_){
@@ -503,14 +624,9 @@ int main(int argc, char* argv[]){
 
 	std::cout << " Using 1 size unit = " << drawingUnit << " mm.\n";
 
-	geantGdmlFile handler(outputFilename.c_str());
+	geantGdmlFile handler;
 	handler.setDrawingUnit(drawingUnit);
-	
-	for(std::vector<std::string>::iterator iter = inputFilenames.begin(); iter != inputFilenames.end(); iter++){
-		handler.processFile((*iter));
-	}
-	
-	handler.close();
+	handler.process(outputFilename, inputFilenames);
 
 	std::cout << " Generated master output file \"" << outputFilename << "\"\n";
 
