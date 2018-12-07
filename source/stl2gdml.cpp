@@ -225,13 +225,13 @@ void generateHeader(std::ostream &ofile){
 	ofile << "<gdml xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" xsi:noNamespaceSchemaLocation=\"http://service-spi.web.cern.ch/service-spi/app/releases/GDML/schema/gdml.xsd\">\n\n";
 }
 
-unsigned int generateUniqueVertices(std::ostream &ofile, std::vector<facet> &solid){
+unsigned int generateUniqueVertices(std::ostream &ofile, std::vector<facet> &solid, const std::string &name, const int &id){
 	std::vector<threeTuple> unique;
 	for(std::vector<facet>::iterator iter = solid.begin(); iter != solid.end(); iter++){	
 		for(int i = 0; i < 3; i++){
 			if(!isInVector(iter->vertices[i], unique)){ // Add it to the vector
 				std::stringstream stream;
-				stream << "v" << unique.size();
+				stream << "v" << id << "_" << unique.size();
 				threeTuple vec(iter->vertices[i]);
 				vec.name = stream.str();
 				unique.push_back(vec);
@@ -260,7 +260,7 @@ unsigned int generateUniqueVertices(std::ostream &ofile, std::vector<facet> &sol
 	}
 
 	ofile << "    <solids>\n";
-	ofile << "        <tessellated aunit=\"deg\" lunit=\"mm\" name=\"Thingy\">\n";
+	ofile << "        <tessellated aunit=\"deg\" lunit=\"mm\" name=\"" << name << "\">\n";
 
 	// Print the triangular definitions to the output file.
 	for(std::vector<facet>::iterator iter = solid.begin(); iter != solid.end(); iter++){
@@ -278,16 +278,16 @@ unsigned int generateUniqueVertices(std::ostream &ofile, std::vector<facet> &sol
 	return unique.size();
 }
 
-void generateFooter(std::ostream &ofile){
+void generateFooter(std::ostream &ofile, const std::string &name){
 	ofile << "    <structure>\n";
-	ofile << "        <volume name=\"FILENAME.AST\">\n";
+	ofile << "        <volume name=\"" << name << ".gdml\">\n";
 	ofile << "            <materialref ref=\"Vacuum\"/>\n";
-	ofile << "            <solidref ref=\"Thingy\"/>\n";
+	ofile << "            <solidref ref=\"" << name << "\"/>\n";
 	ofile << "        </volume>\n";
 	ofile << "    </structure>\n\n";
 
 	ofile << "    <setup name=\"Default\" version=\"1.0\">\n";
-	ofile << "        <world ref=\"FILENAME.AST\"/>\n";
+	ofile << "        <world ref=\"" << name << ".gdml\"/>\n";
 	ofile << "    </setup>\n";
 	ofile << "</gdml>\n";
 }
@@ -407,16 +407,24 @@ int main(int argc, char* argv[]){
 	std::ofstream masterFile(outputFilename.c_str());
 	generateMasterFileHeader(masterFile);
 
+	int solidCount = 0;
 	for(std::vector<std::string>::iterator iter = inputFilenames.begin(); iter != inputFilenames.end(); iter++){
+		std::string solidName = "Thingy";
 		std::string gdmlFilename = (*iter);
 		std::string extension = "";
-		size_t index = gdmlFilename.find_last_of('.');
+		size_t index = iter->find_last_of('.');
 		if(index != std::string::npos){
+			solidName = iter->substr(0, index);
 			gdmlFilename = iter->substr(0, index) + ".gdml";
 			extension = iter->substr(index+1);
 		}
 			
-		std::cout << " Processing file \"" << (*iter) << "\"\n";
+		index = solidName.find_last_of('/');
+		if(index != std::string::npos){
+			solidName = solidName.substr(index+1);
+		}
+			
+		std::cout << " Processing file \"" << (*iter) << "\", solid=" << solidName << "\n";
 		
 		std::vector<facet> solid;
 		if(extension == "stl"){ // Binary STL file
@@ -433,9 +441,9 @@ int main(int argc, char* argv[]){
 		std::ofstream ofile(gdmlFilename.c_str());
 		generateHeader(ofile);
 		
-		std::cout << "  Identified " << generateUniqueVertices(ofile, solid) << " unique vertices\n";
+		std::cout << "  Identified " << generateUniqueVertices(ofile, solid, solidName, solidCount++) << " unique vertices\n";
 		
-		generateFooter(ofile);
+		generateFooter(ofile, solidName);
 		ofile.close();
 
 		std::cout << "  Generated output file \"" << gdmlFilename << "\"\n";
