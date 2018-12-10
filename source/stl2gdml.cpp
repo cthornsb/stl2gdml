@@ -326,9 +326,11 @@ void gdmlEntry::computeOffset(const double &sizeX_, const double &sizeY_, const 
 
 class geantGdmlFile{
   public:
-	geantGdmlFile() : solidCount(0), drawingUnit(mm) { }
+	geantGdmlFile() : solidCount(0), drawingUnit(mm), materialName("G4_AIR") { }
 
 	void setDrawingUnit(const double &unit){ drawingUnit = unit; }
+
+	void setMaterialName(const std::string &mat){ materialName = mat; }
 
 	bool process(const std::string &outputFilename, const std::vector<std::string> &filenames);
   
@@ -336,7 +338,9 @@ class geantGdmlFile{
 	int solidCount;
 
 	double drawingUnit;
-  
+	
+	std::string materialName;
+
 	std::ofstream ofile;
 
 	double rmin[3];
@@ -416,7 +420,7 @@ bool geantGdmlFile::processFile(const std::string &filename){
 	
 	ofile << "    <structure>\n";
 	ofile << "        <volume name=\"" << solidName << ".gdml\">\n";
-	ofile << "            <materialref ref=\"Vacuum\"/>\n";
+	ofile << "            <materialref ref=\"" << materialName << "\"/>\n";
 	ofile << "            <solidref ref=\"" << solidName << "\"/>\n";
 	ofile << "        </volume>\n";
 	ofile << "    </structure>\n\n";
@@ -510,7 +514,7 @@ bool geantGdmlFile::generateMasterFile(const std::string &outputFilename){ // Ge
 	}
 	masterFile << "    </define>\n\n";
 	
-	masterFile << "    <materials>\n";
+	/*masterFile << "    <materials>\n";
 	masterFile << "        <!--          -->\n";
 	masterFile << "        <!-- elements -->\n";
 	masterFile << "        <!--          -->\n";
@@ -523,7 +527,7 @@ bool geantGdmlFile::generateMasterFile(const std::string &outputFilename){ // Ge
 	masterFile << "            <D value=\"1.e-25\" unit=\"g/cm3\"/>\n";
 	masterFile << "            <fraction n=\"1.0\" ref=\"videRef\"/>\n";
 	masterFile << "        </material>\n";
-	masterFile << "    </materials>\n\n";
+	masterFile << "    </materials>\n\n";*/
 
 	masterFile << "    <solids>\n";
 	masterFile << "        <box lunit=\"mm\" name=\"world_solid\" x=\"" << worldSize[0] << "\" y=\"" << worldSize[1] << "\" z=\"" << worldSize[2] << "\"/>\n";
@@ -531,7 +535,7 @@ bool geantGdmlFile::generateMasterFile(const std::string &outputFilename){ // Ge
 
 	masterFile << "    <structure>\n";
 	masterFile << "        <volume name=\"world_volume\">\n";
-	masterFile << "            <materialref ref=\"Vacuum\"/>\n";
+	masterFile << "            <materialref ref=\"G4_AIR\"/>\n";
 	masterFile << "            <solidref ref=\"world_solid\"/>\n\n";
 	
 	for(std::vector<gdmlEntry>::iterator iter = goodFiles.begin(); iter != goodFiles.end(); iter++){
@@ -561,6 +565,7 @@ void help(char * prog_name_){
 	std::cout << "   Available options:\n";
 	std::cout << "    --help (-h)              | Display this dialogue.\n";
 	std::cout << "    --unit <unit>            | Specify the name of the size unit [e.g. in, ft, m, dm, cm, mm] (default is mm).\n";
+	std::cout << "    --material <name>        |  (default is \"G4_AIR\").\n";
 }
 
 int main(int argc, char* argv[]){
@@ -575,6 +580,7 @@ int main(int argc, char* argv[]){
 	}
 	
 	std::string outputFilename;
+	std::string materialName;
 	std::vector<std::string> inputFilenames;
 	double drawingUnit = mm;
 
@@ -605,6 +611,14 @@ int main(int argc, char* argv[]){
 				return 2;
 			}
 		}
+		else if(strcmp(argv[index], "--material") == 0){
+			if(index + 1 >= argc){
+				std::cout << " Error: Missing required argument to '--material'!\n";
+				help(argv[0]);
+				return 1;
+			}
+			materialName = std::string(argv[++index]);
+		}
 		else if(argCount++ == 1)
 			outputFilename = std::string(argv[index]);
 		else
@@ -626,6 +640,12 @@ int main(int argc, char* argv[]){
 
 	geantGdmlFile handler;
 	handler.setDrawingUnit(drawingUnit);
+	
+	if(!materialName.empty()){ // Set the name of the material.
+		std::cout << " Using material = \"" << materialName << "\".\n";
+		handler.setMaterialName(materialName);
+	}
+	
 	handler.process(outputFilename, inputFilenames);
 
 	std::cout << " Generated master output file \"" << outputFilename << "\"\n";
