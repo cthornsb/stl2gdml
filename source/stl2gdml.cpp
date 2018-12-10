@@ -422,6 +422,8 @@ bool geantGdmlFile::processFile(const std::string &filename){
 	ofile << "        <volume name=\"" << solidName << ".gdml\">\n";
 	ofile << "            <materialref ref=\"" << materialName << "\"/>\n";
 	ofile << "            <solidref ref=\"" << solidName << "\"/>\n";
+	ofile << "            <positionref ref=\"" << solidName << ".gdml_pos\"/>\n";
+	ofile << "            <rotationref ref=\"" << solidName << ".gdml_rot\"/>\n";
 	ofile << "        </volume>\n";
 	ofile << "    </structure>\n\n";
 
@@ -507,10 +509,14 @@ bool geantGdmlFile::generateMasterFile(const std::string &outputFilename){ // Ge
 	}
 	
 	masterFile << "    <define>\n";
-	for(std::vector<gdmlEntry>::iterator iter = goodFiles.begin(); iter != goodFiles.end(); iter++){
+	for(std::vector<gdmlEntry>::iterator iter = goodFiles.begin(); iter != goodFiles.end(); iter++){ // Positions
 		// <position name="offsetpos" unit="mm" x="19" y="0" z="19"/>
 		iter->computeOffset(worldSize[0], worldSize[1], worldSize[2]);
-		masterFile << "        <position name=\"" << iter->solidName << "_pos\" unit=\"mm\" x=\"" << iter->offset.p[0] << "\" y=\"" << iter->offset.p[1] << "\" z=\"" << iter->offset.p[2] << "\"/>\n";
+		masterFile << "        <position name=\"" << iter->solidName << ".gdml_pos\" unit=\"mm\" x=\"" << iter->offset.p[0] << "\" y=\"" << iter->offset.p[1] << "\" z=\"" << iter->offset.p[2] << "\"/>\n";
+	}
+	for(std::vector<gdmlEntry>::iterator iter = goodFiles.begin(); iter != goodFiles.end(); iter++){ // Rotations
+		// <rotation name="offsetpos" unit="deg" x="0" y="0" z="0"/>
+		masterFile << "        <rotation name=\"" << iter->solidName << ".gdml_rot\" unit=\"deg\" x=\"0\" y=\"0\" z=\"0\"/>\n";
 	}
 	masterFile << "    </define>\n\n";
 	
@@ -543,7 +549,6 @@ bool geantGdmlFile::generateMasterFile(const std::string &outputFilename){ // Ge
 		// <positionref ref="position"/>
 		masterFile << "            <physvol>\n";
 		masterFile << "                <file name=\"" << iter->filename << "\"/>\n";
-		masterFile << "                <positionref ref=\"" << iter->solidName << "_pos\"/>\n";
 		masterFile << "            </physvol>\n\n";
 	}
 	
