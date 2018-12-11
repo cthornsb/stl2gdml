@@ -138,6 +138,48 @@ std::string facet::print() const {
 	return stream.str();
 }
 
+class ySlice{
+  public:
+	ySlice() : xmin(1E10), xmax(-1E10), zmin(1E10), zmax(-1E10), y(0), count(0), thickness(0.1) { }
+	
+	ySlice(const double &y_) : xmin(1E10), xmax(-1E10), zmin(1E10), zmax(-1E10), y(y_), count(0), thickness(0.1) { }
+	
+	bool isInSlice(const double &y_) const { return (y_ > y-thickness/2 && y_ <= y+thickness/2); }
+	
+	bool empty() const { return (count == 0); }
+	
+	double getY() const { return y; }
+	
+	double getSizeX() const { return (xmax-xmin); }
+	
+	double getSizeZ() const { return (zmax-zmin); }
+	
+	void addPoint(const double &x, const double &z);
+	
+	void addPoint(const threeTuple &vec);
+
+  private:	
+	double xmin, xmax;
+	double zmin, zmax;
+	double y;
+	
+	size_t count;
+	
+	double thickness; // Thickness of slice.	
+};
+
+void ySlice::addPoint(const double &x, const double &z){
+	xmin = std::min(xmin, x); 
+	xmax = std::max(xmax, x);
+	zmin = std::min(zmin, z); 
+	zmax = std::max(zmax, z);
+	count++;
+}
+
+void ySlice::addPoint(const threeTuple &vec){
+	this->addPoint(vec.p[0], vec.p[2]);
+}
+
 class polySolid{
   public:
 	polySolid(){ initialize(); }
@@ -152,6 +194,8 @@ class polySolid{
 
 	void getUniqueVertices(std::vector<threeTuple> &unique, const int &id);
 	
+	std::vector<ySlice> *getSlices(){ return &slices; }
+	
 	std::vector<facet>::iterator begin(){ return solid.begin(); }
 	
 	std::vector<facet>::iterator end(){ return solid.end(); }
@@ -162,6 +206,7 @@ class polySolid{
   
   private:
 	std::vector<facet> solid;
+	std::vector<ySlice> slices; // Bounding box for each y-slice of the model.
 	
 	double rmin[3];
 	double rmax[3];
@@ -169,6 +214,8 @@ class polySolid{
 	void initialize();
 	
 	bool isInVector(const threeTuple &tuple, const std::vector<threeTuple> &solid);
+	
+	bool isInSlices(const double &y, std::vector<ySlice>::iterator &iter);
 };
 
 void polySolid::getSizeX(double &min, double &max) const {
@@ -184,6 +231,7 @@ void polySolid::getSizeZ(double &min, double &max) const {
 }
 
 void polySolid::getUniqueVertices(std::vector<threeTuple> &unique, const int &id){
+	slices.clear();
 	for(std::vector<facet>::iterator iter = solid.begin(); iter != solid.end(); iter++){	
 		for(size_t i = 0; i < 3; i++){
 			if(!isInVector(iter->vertices[i], unique)){ // Add it to the vector
@@ -192,6 +240,15 @@ void polySolid::getUniqueVertices(std::vector<threeTuple> &unique, const int &id
 				threeTuple vec(iter->vertices[i]);
 				vec.name = stream.str();
 				unique.push_back(vec);
+				
+				double y = vec.p[1];
+				std::vector<ySlice>::iterator sliceIterator;
+				if(isInSlices(y, sliceIterator)){
+					sliceIterator->addPoint(vec);
+				}
+				else{ // Add the slice to the list.
+					slices.push_back(ySlice(y));
+				}
 			}
 		}
 	}
@@ -223,6 +280,13 @@ void polySolid::initialize(){
 bool polySolid::isInVector(const threeTuple &tuple, const std::vector<threeTuple> &solid){
 	for(std::vector<threeTuple>::const_iterator iter = solid.begin(); iter != solid.end(); iter++){	
 		if(tuple == (*iter)) return true;
+	}
+	return false;
+}
+
+bool polySolid::isInSlices(const double &y, std::vector<ySlice>::iterator &iter){
+	for(iter = slices.begin(); iter != slices.end(); iter++){	
+		if(iter->isInSlice(y)) return true;
 	}
 	return false;
 }
@@ -326,18 +390,22 @@ void gdmlEntry::computeOffset(const double &sizeX_, const double &sizeY_, const 
 
 class geantGdmlFile{
   public:
-	geantGdmlFile() : solidCount(0), drawingUnit(mm), materialName("G4_AIR") { }
+	geantGdmlFile() : solidCount(0), drawingUnit(mm), debug(false), materialName("G4_AIR") { }
+
+	bool toggleDebug(){ return (debug = !debug); }
 
 	void setDrawingUnit(const double &unit){ drawingUnit = unit; }
 
 	void setMaterialName(const std::string &mat){ materialName = mat; }
 
 	bool process(const std::string &outputFilename, const std::vector<std::string> &filenames);
-  
+
   private:
 	int solidCount;
 
 	double drawingUnit;
+	
+	bool debug;
 	
 	std::string materialName;
 
@@ -433,6 +501,16 @@ bool geantGdmlFile::processFile(const std::string &filename){
 	ofile << "</gdml>\n";
 	
 	ofile.close();
+	
+	if(debug){
+		std::vector<ySlice> *slices = solid.getSlices();
+		std::cout << "debug: slices->size()=" << slices->size() << std::endl;
+		for(size_t i = 0; i < slices->size(); i++){
+			if(!slices->at(i).empty()){
+				std::cout << "debug:  y=" << slices->at(i).getY() << ", x=" << slices->at(i).getSizeX() << ", z=" << slices->at(i).getSizeZ() << "\n";
+			}
+		}
+	}
 	
 	goodFiles.push_back(gdmlEntry(gdmlFilename, solidName, physicalSize));
 	
@@ -590,6 +668,7 @@ void help(char * prog_name_){
 	std::cout << "    --help (-h)              | Display this dialogue.\n";
 	std::cout << "    --unit <unit>            | Specify the name of the size unit [e.g. in, ft, m, dm, cm, mm] (default is mm).\n";
 	std::cout << "    --material <name>        | Specify the material of the model (default is \"G4_AIR\").\n";
+	std::cout << "    --debug                   | Enable debug mode.\n";
 }
 
 int main(int argc, char* argv[]){
@@ -607,6 +686,7 @@ int main(int argc, char* argv[]){
 	std::string materialName;
 	std::vector<std::string> inputFilenames;
 	double drawingUnit = mm;
+	bool debugMode = false;
 
 	int argCount = 1;
 	int index = 1;
@@ -643,6 +723,9 @@ int main(int argc, char* argv[]){
 			}
 			materialName = std::string(argv[++index]);
 		}
+		else if(strcmp(argv[index], "--debug") == 0){
+			debugMode = true;
+		}
 		else if(argCount++ == 1)
 			outputFilename = std::string(argv[index]);
 		else
@@ -664,6 +747,7 @@ int main(int argc, char* argv[]){
 
 	geantGdmlFile handler;
 	handler.setDrawingUnit(drawingUnit);
+	if(debugMode) handler.toggleDebug();
 	
 	if(!materialName.empty()){ // Set the name of the material.
 		std::cout << " Using material = \"" << materialName << "\".\n";
