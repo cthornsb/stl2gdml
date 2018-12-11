@@ -499,6 +499,25 @@ bool geantGdmlFile::generateMasterFile(const std::string &outputFilename){ // Ge
 	std::ofstream masterFile(outputFilename.c_str());
 	if(!masterFile.good())
 		return false;
+	
+	std::string objName;
+	size_t index1, index2;
+	index1 = outputFilename.find_last_of('/');
+	index2 = outputFilename.find_last_of('.');
+	
+	// Get the object name from the output path.
+	if(index1 != std::string::npos){
+		if(index2 != std::string::npos)
+			objName = outputFilename.substr(index1+1, index2-(index1+1));
+		else
+			objName = outputFilename.substr(index1+1);
+	}
+	else{
+		if(index2 != std::string::npos)
+			objName = outputFilename.substr(0, index2);
+		else
+			objName = outputFilename;
+	}
 		
 	masterFile << "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"no\" ?>\n";
 	masterFile << "<gdml xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" xsi:noNamespaceSchemaLocation=\"http://service-spi.web.cern.ch/service-spi/app/releases/GDML/schema/gdml.xsd\">\n\n";
@@ -536,13 +555,13 @@ bool geantGdmlFile::generateMasterFile(const std::string &outputFilename){ // Ge
 	masterFile << "    </materials>\n\n";*/
 
 	masterFile << "    <solids>\n";
-	masterFile << "        <box lunit=\"mm\" name=\"world_solid\" x=\"" << worldSize[0] << "\" y=\"" << worldSize[1] << "\" z=\"" << worldSize[2] << "\"/>\n";
+	masterFile << "        <box lunit=\"mm\" name=\"" << objName << "_solid\" x=\"" << worldSize[0] << "\" y=\"" << worldSize[1] << "\" z=\"" << worldSize[2] << "\"/>\n";
 	masterFile << "    </solids>\n\n";
 
 	masterFile << "    <structure>\n";
-	masterFile << "        <volume name=\"world_volume\">\n";
+	masterFile << "        <volume name=\"" << objName << "\">\n";
 	masterFile << "            <materialref ref=\"G4_AIR\"/>\n";
-	masterFile << "            <solidref ref=\"world_solid\"/>\n\n";
+	masterFile << "            <solidref ref=\"" << objName << "_solid\"/>\n\n";
 	
 	for(std::vector<gdmlEntry>::iterator iter = goodFiles.begin(); iter != goodFiles.end(); iter++){
 		// <file name="/path/to/file/file.gdml"/>
@@ -556,7 +575,7 @@ bool geantGdmlFile::generateMasterFile(const std::string &outputFilename){ // Ge
 	masterFile << "    </structure>\n\n";
 
 	masterFile << "    <setup name=\"Default\" version=\"1.0\">\n";
-	masterFile << "        <world ref=\"world_volume\"/>\n";
+	masterFile << "        <world ref=\"" << objName << "\"/>\n";
 	masterFile << "    </setup>\n";
 	masterFile << "</gdml>\n";
 	
@@ -570,7 +589,7 @@ void help(char * prog_name_){
 	std::cout << "   Available options:\n";
 	std::cout << "    --help (-h)              | Display this dialogue.\n";
 	std::cout << "    --unit <unit>            | Specify the name of the size unit [e.g. in, ft, m, dm, cm, mm] (default is mm).\n";
-	std::cout << "    --material <name>        |  (default is \"G4_AIR\").\n";
+	std::cout << "    --material <name>        | Specify the material of the model (default is \"G4_AIR\").\n";
 }
 
 int main(int argc, char* argv[]){
