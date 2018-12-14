@@ -4,6 +4,7 @@
 #include <string>
 
 #include "threeTuple.hpp"
+#include "polySolid.hpp"
 
 class gdmlEntry{
   public:
@@ -11,6 +12,8 @@ class gdmlEntry{
 	std::string solidName;
 	threeTuple physSize;
 	threeTuple offset;
+
+	polySolid solid; // 3d solids.
 	
 	gdmlEntry(){ }
 	

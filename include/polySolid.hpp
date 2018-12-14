@@ -29,6 +29,8 @@ class polySolid{
 	void add(const facet &poly);
 	
 	void clear();
+	
+	void compare(polySolid &other);
   
   private:
 	std::vector<facet> solid;
@@ -39,7 +41,7 @@ class polySolid{
 	
 	void initialize();
 	
-	bool isInVector(const threeTuple &tuple, const std::vector<threeTuple> &solid);
+	bool isInVector(const threeTuple &tuple, const std::vector<threeTuple> &vec);
 	
 	bool isInSlices(const double &y, std::vector<ySlice>::iterator &iter);
 };

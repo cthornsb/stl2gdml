@@ -1,3 +1,4 @@
+#include <iostream>
 #include <sstream>
 
 #include "polySolid.hpp"
@@ -54,6 +55,15 @@ void polySolid::clear(){
 	initialize();
 }
 
+void polySolid::compare(polySolid &other){
+	for(std::vector<facet>::iterator iter1 = solid.begin(); iter1 != solid.end(); iter1++){	
+		for(std::vector<facet>::iterator iter2 = other.begin(); iter2 != other.end(); iter2++){	
+			if(iter1->compare((*iter2)))
+				std::cout << " BLAH\n";
+		}
+	}
+}
+
 void polySolid::initialize(){ 
 	for(size_t i = 0; i < 3; i++){
 		rmin[i] = 1E10;
@@ -61,8 +71,8 @@ void polySolid::initialize(){
 	}
 }
 
-bool polySolid::isInVector(const threeTuple &tuple, const std::vector<threeTuple> &solid){
-	for(std::vector<threeTuple>::const_iterator iter = solid.begin(); iter != solid.end(); iter++){	
+bool polySolid::isInVector(const threeTuple &tuple, const std::vector<threeTuple> &vec){
+	for(std::vector<threeTuple>::const_iterator iter = vec.begin(); iter != vec.end(); iter++){	
 		if(tuple == (*iter)) return true;
 	}
 	return false;

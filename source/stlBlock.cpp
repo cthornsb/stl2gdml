@@ -13,3 +13,15 @@ void stlBlock::operator *= (const double &val){
 		vertices[i] *= val;
 	}
 }
+
+bool stlBlock::compare(const stlBlock &other) const {
+	threeTuple dV[3];
+	for(size_t i = 0; i < 3; i++){
+		dV[i] = vertices[i] - other.vertices[i];
+	}
+	return (dV[0].length() == 0 && dV[1].length() == 0 && dV[2].length() == 0);
+}
+
+bool stlBlock::usesVertex(const threeTuple &vertex) const {
+	return (vertex == vertices[0] || vertex == vertices[1] || vertex == vertices[2]);
+}

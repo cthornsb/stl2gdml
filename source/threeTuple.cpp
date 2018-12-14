@@ -1,4 +1,5 @@
 #include <sstream>
+#include <cmath>
 
 #include "threeTuple.hpp"
 
@@ -18,8 +19,20 @@ threeTuple::threeTuple(const std::string &str_) : name() {
 	}
 }
 
+threeTuple threeTuple::operator + (const threeTuple &other) const {
+	return threeTuple(p[0]+other.p[0], p[1]+other.p[1], p[2]+other.p[2]);
+}
+
+threeTuple threeTuple::operator - (const threeTuple &other) const {
+	return threeTuple(p[0]-other.p[0], p[1]-other.p[1], p[2]-other.p[2]);
+}
+
 std::string threeTuple::print() const {
 	std::stringstream stream;
 	stream << "<position name=\"" << name << "\" unit=\"mm\" x=\"" << p[0] << "\" y=\"" << p[1] << "\" z=\"" << p[2] << "\"/>";
 	return stream.str();
+}
+
+double threeTuple::length() const {
+	return std::sqrt(p[0]*p[0] + p[1]*p[1] + p[1]*p[1]);
 }

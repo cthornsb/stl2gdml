@@ -24,6 +24,8 @@ class facet : public stlBlock {
 	
 	bool checkNames() const ;
 	
+	bool usesVertex(const std::string &vertexName) const ;
+	
 	std::string print() const ;
 };
 

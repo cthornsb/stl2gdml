@@ -15,6 +15,10 @@ class stlBlock{
 	stlBlock(float *array, const unsigned short &att=0);
 	
 	void operator *= (const double &val);
+	
+	bool compare(const stlBlock &other) const ;
+	
+	bool usesVertex(const threeTuple &vertex) const ;
 };
 
 #endif

@@ -29,6 +29,10 @@ bool facet::checkNames() const {
 	return (!names[0].empty() && !names[1].empty() && !names[2].empty());
 }
 
+bool facet::usesVertex(const std::string &vertexName) const {
+	return (vertexName == names[0] || vertexName == names[1] || vertexName == names[2]);
+}
+
 std::string facet::print() const {
 	std::stringstream stream;
 	stream << "<triangular vertex1=\"" << names[0] << "\" vertex2=\"" << names[1] << "\" vertex3=\"" << names[2] << "\"/>";
