@@ -23,18 +23,23 @@ TOP_LEVEL = $(shell pwd)
 INCLUDE_DIR = $(TOP_LEVEL)/include
 SOURCE_DIR = $(TOP_LEVEL)/source
 EXEC_DIR = $(TOP_LEVEL)/exec
+OBJ_DIR = $(TOP_LEVEL)/obj
 
 # Tools
 ALL_TOOLS = stl2gdml
 EXE_NAMES = $(addprefix $(EXEC_DIR)/, $(addsuffix .a, $(ALL_TOOLS)))
 INSTALLED = $(addprefix $(INSTALL_DIR)/, $(ALL_TOOLS))
 
+# Source files
+SOURCES = facet geantGdmlFile polySolid stlBlock threeTuple ySlice
+OBJFILES = $(addprefix $(OBJ_DIR)/, $(addsuffix .o, $(SOURCES)))
+
 # List of directories to generate if they do not exist.
-DIRECTORIES = $(EXEC_DIR)
+DIRECTORIES = $(EXEC_DIR) $(OBJ_DIR)
 
 #####################################################################
 
-all: $(DIRECTORIES) $(EXE_NAMES)
+all: $(DIRECTORIES) $(OBJFILES) $(EXE_NAMES)
 #	Create all directories, make all objects, and link executable
 
 .PHONY: $(ALL_TOOLS) $(INSTALLED) $(DIRECTORIES)
@@ -50,9 +55,13 @@ $(DIRECTORIES):
 
 #####################################################################
 
-$(EXEC_DIR)/%.a: $(SOURCE_DIR)/%.cpp
+$(EXEC_DIR)/%.a: $(SOURCE_DIR)/%.cpp $(OBJFILES)
 #	Compile C++ source files
-	$(CC) $(CFLAGS) $< -o $@ $(LDLIBS)
+	$(CC) $(CFLAGS) $< -o $@ $(OBJFILES) $(LDLIBS)
+
+$(OBJ_DIR)/%.o: $(SOURCE_DIR)/%.cpp
+#	Compile C++ source files
+	$(CC) $(CFLAGS) $< -c -o $@
 
 #####################################################################
 
@@ -74,3 +83,4 @@ uninstall: $(INSTALLED)
 
 clean: uninstall
 	@rm -f $(EXE_NAMES)
+	@rm -f $(OBJFILES)
