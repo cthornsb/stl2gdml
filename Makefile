@@ -31,7 +31,7 @@ EXE_NAMES = $(addprefix $(EXEC_DIR)/, $(addsuffix .a, $(ALL_TOOLS)))
 INSTALLED = $(addprefix $(INSTALL_DIR)/, $(ALL_TOOLS))
 
 # Source files
-SOURCES = facet geantGdmlFile polySolid stlBlock threeTuple ySlice
+SOURCES = facet gdmlEntry geantGdmlFile polySolid stlBlock threeTuple ySlice
 OBJFILES = $(addprefix $(OBJ_DIR)/, $(addsuffix .o, $(SOURCES)))
 
 # List of directories to generate if they do not exist.

@@ -87,17 +87,6 @@ unsigned int readSTL(const char *fname, polySolid &solid, const double &unit=mm)
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-// class gdmlEntry
-///////////////////////////////////////////////////////////////////////////////
-
-void gdmlEntry::computeOffset(const double &sizeX_, const double &sizeY_, const double &sizeZ_){
-	double xoffset = -sizeX_/2 + (sizeX_ - physSize.p[0])/2;
-	double yoffset = -sizeY_/2 + (sizeY_ - physSize.p[1])/2;
-	double zoffset = -sizeZ_/2 + (sizeZ_ - physSize.p[2])/2;
-	offset = threeTuple(xoffset, yoffset, zoffset);
-}
-
-///////////////////////////////////////////////////////////////////////////////
 // class geantGdmlFile
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -293,21 +282,6 @@ bool geantGdmlFile::generateMasterFile(const std::string &outputFilename){ // Ge
 	}
 	masterFile << "    </define>\n\n";
 	
-	/*masterFile << "    <materials>\n";
-	masterFile << "        <!--          -->\n";
-	masterFile << "        <!-- elements -->\n";
-	masterFile << "        <!--          -->\n";
-	masterFile << "        <element name=\"videRef\" formula=\"VACUUM\" Z=\"1\"> <atom value=\"1.\"/> </element>\n\n";
-
-	masterFile << "        <!--          -->\n";
-	masterFile << "        <!-- vacuum   -->\n";
-	masterFile << "        <!--          -->\n";
-	masterFile << "        <material formula=\" \" name=\"Vacuum\">\n";
-	masterFile << "            <D value=\"1.e-25\" unit=\"g/cm3\"/>\n";
-	masterFile << "            <fraction n=\"1.0\" ref=\"videRef\"/>\n";
-	masterFile << "        </material>\n";
-	masterFile << "    </materials>\n\n";*/
-
 	masterFile << "    <solids>\n";
 	masterFile << "        <box lunit=\"mm\" name=\"" << objName << "_solid\" x=\"" << worldSize[0] << "\" y=\"" << worldSize[1] << "\" z=\"" << worldSize[2] << "\"/>\n";
 	masterFile << "    </solids>\n\n";
