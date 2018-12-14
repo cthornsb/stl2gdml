@@ -36,3 +36,7 @@ std::string threeTuple::print() const {
 double threeTuple::length() const {
 	return std::sqrt(p[0]*p[0] + p[1]*p[1] + p[1]*p[1]);
 }
+
+double threeTuple::dist(const threeTuple &other) const {
+	return (other-(*this)).length();	
+}

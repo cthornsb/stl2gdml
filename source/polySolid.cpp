@@ -15,9 +15,8 @@ void polySolid::getSizeZ(double &min, double &max) const {
 	min = rmin[2]; max = rmax[2];
 }
 
-void polySolid::getUniqueVertices(std::vector<threeTuple> &unique, const int &id){
-	slices.clear();
-	for(std::vector<facet>::iterator iter = solid.begin(); iter != solid.end(); iter++){	
+void polySolid::getUniqueVertices(std::vector<threeTuple> &unique, const int &id) const {
+	for(std::vector<facet>::const_iterator iter = solid.cbegin(); iter != solid.cend(); iter++){	
 		for(size_t i = 0; i < 3; i++){
 			if(!isInVector(iter->vertices[i], unique)){ // Add it to the vector
 				std::stringstream stream;
@@ -26,16 +25,31 @@ void polySolid::getUniqueVertices(std::vector<threeTuple> &unique, const int &id
 				vec.name = stream.str();
 				unique.push_back(vec);
 				
-				double y = vec.p[1];
+				/*double y = vec.p[1];
 				std::vector<ySlice>::iterator sliceIterator;
 				if(isInSlices(y, sliceIterator)){
 					sliceIterator->addPoint(vec);
 				}
 				else{ // Add the slice to the list.
 					slices.push_back(ySlice(y));
-				}
+				}*/
 			}
 		}
+	}
+}
+
+void polySolid::getUniquePolygons(std::vector<facet> &unique, const threeTuple &offset) const {
+	bool foundMatch;
+	for(std::vector<facet>::const_iterator iter1 = solid.cbegin(); iter1 != solid.cend(); iter1++){	
+		foundMatch = false;
+		for(std::vector<facet>::const_iterator iter2 = unique.cbegin(); iter2 != unique.cend(); iter2++){
+			if(iter2->compare((*iter1), threeTuple(0,0,0))){
+				foundMatch = true;
+				break;
+			}
+		}
+		if(!foundMatch) // Add it to the vector
+			unique.push_back((*iter1));
 	}
 }
 
@@ -50,18 +64,15 @@ void polySolid::add(const facet &poly){
 	}
 }
 
+void polySolid::addOffset(const threeTuple &offset){
+	for(std::vector<facet>::iterator iter = solid.begin(); iter != solid.end(); iter++){	
+		iter->addOffset(offset);
+	}	
+}
+
 void polySolid::clear(){ 
 	solid.clear(); 
 	initialize();
-}
-
-void polySolid::compare(polySolid &other){
-	for(std::vector<facet>::iterator iter1 = solid.begin(); iter1 != solid.end(); iter1++){	
-		for(std::vector<facet>::iterator iter2 = other.begin(); iter2 != other.end(); iter2++){	
-			if(iter1->compare((*iter2)))
-				std::cout << " BLAH\n";
-		}
-	}
 }
 
 void polySolid::initialize(){ 
@@ -69,13 +80,6 @@ void polySolid::initialize(){
 		rmin[i] = 1E10;
 		rmax[i] = -1E10;
 	}
-}
-
-bool polySolid::isInVector(const threeTuple &tuple, const std::vector<threeTuple> &vec){
-	for(std::vector<threeTuple>::const_iterator iter = vec.begin(); iter != vec.end(); iter++){	
-		if(tuple == (*iter)) return true;
-	}
-	return false;
 }
 
 bool polySolid::isInSlices(const double &y, std::vector<ySlice>::iterator &iter){

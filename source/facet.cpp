@@ -33,6 +33,12 @@ bool facet::usesVertex(const std::string &vertexName) const {
 	return (vertexName == names[0] || vertexName == names[1] || vertexName == names[2]);
 }
 
+bool facet::compare(const facet &other, const threeTuple &offset) const {
+	facet offsetFacet(other);
+	offsetFacet.addOffset(offset);
+	return ((*this) == offsetFacet);
+}
+
 std::string facet::print() const {
 	std::stringstream stream;
 	stream << "<triangular vertex1=\"" << names[0] << "\" vertex2=\"" << names[1] << "\" vertex3=\"" << names[2] << "\"/>";

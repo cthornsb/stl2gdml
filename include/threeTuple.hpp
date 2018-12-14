@@ -27,6 +27,8 @@ class threeTuple{
 	
 	double length() const ;	
 	
+	double dist(const threeTuple &other) const ;
+	
 	void zero(){ p[0] = 0; p[1] = 0; p[2] = 0; }
 };
 

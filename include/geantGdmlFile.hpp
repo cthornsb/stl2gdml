@@ -39,6 +39,7 @@ class geantGdmlFile{
 
 	double rmin[3];
 	double rmax[3];
+	double worldSize[3];
 
 	std::vector<gdmlEntry> goodFiles; // List of good gdml files.
 	
@@ -46,13 +47,9 @@ class geantGdmlFile{
 	
 	std::vector<facet> uniquePoly; // List of unique polygons.
 	
-	polySolid *solid; // Pointer to the current 3d solid.
-
 	bool processFile(const std::string &filename);
 
 	bool writeGeometry(const gdmlEntry &entry);
-
-	unsigned int generateUniqueVertices(const std::string &name, threeTuple &size);
 
 	bool generateMasterFile(const std::string &outputFilename);
 };

@@ -5,18 +5,32 @@
 #include "polySolid.hpp"
 
 ///////////////////////////////////////////////////////////////////////////////
+// splitFilename
+///////////////////////////////////////////////////////////////////////////////
+
+void splitFilename(const std::string &filename, std::string &name, std::string &prefix, std::string &extension){
+	size_t index = filename.find_last_of('.');
+	if(index != std::string::npos){
+		prefix = filename.substr(0, index);
+		extension = filename.substr(index+1);
+	}
+		
+	index = prefix.find_last_of('/');
+	if(index != std::string::npos){
+		name = prefix.substr(index+1);
+	}
+}
+
+///////////////////////////////////////////////////////////////////////////////
 // readAST
 ///////////////////////////////////////////////////////////////////////////////
 
-unsigned int readAST(const char *fname, gdmlEntry &entry, polySolid* &current, const double &unit=mm){
+unsigned int readAST(const char *fname, gdmlEntry &entry, const double &unit=mm){
 	std::ifstream file(fname);
 	if(!file.good())
 		return 0;
 	
 	std::vector<std::string> block;
-	
-	// Update the current solid pointer.
-	current = &entry.solid;
 	
 	unsigned int linesRead = 0;
 	
@@ -33,7 +47,7 @@ unsigned int readAST(const char *fname, gdmlEntry &entry, polySolid* &current, c
 			facet triangle(block);
 			if(triangle.good){
 				triangle *= unit;
-				current->add(triangle);
+				entry.solid.add(triangle);
 			}
 			block.clear();
 		}
@@ -51,7 +65,7 @@ unsigned int readAST(const char *fname, gdmlEntry &entry, polySolid* &current, c
 // readSTL
 ///////////////////////////////////////////////////////////////////////////////
 
-unsigned int readSTL(const char *fname, gdmlEntry &entry, polySolid* &current, const double &unit=mm){
+unsigned int readSTL(const char *fname, gdmlEntry &entry, const double &unit=mm){
 	unsigned char header[80];
 	unsigned int nTriangles;
 
@@ -66,9 +80,6 @@ unsigned int readSTL(const char *fname, gdmlEntry &entry, polySolid* &current, c
 	float vect[12];
 	unsigned short att;
 
-	// Update the current solid pointer.
-	current = &entry.solid;
-	
 	bool invalidRead = false;
 	for(unsigned int i = 0; i < nTriangles; i++){
 		file.read((char*)vect, 48);
@@ -80,7 +91,7 @@ unsigned int readSTL(const char *fname, gdmlEntry &entry, polySolid* &current, c
 		stlBlock block(vect, att);
 		facet triangle(block);
 		triangle *= unit;
-		current->add(triangle);
+		entry.solid.add(triangle);
 	}
 	
 	file.close();	
@@ -89,7 +100,7 @@ unsigned int readSTL(const char *fname, gdmlEntry &entry, polySolid* &current, c
 		std::cout << " Warning: Failed to read all " << nTriangles << " triangles specified in header!\n";
 	}
 	
-	return current->size();
+	return entry.solid.size();
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -109,63 +120,121 @@ bool geantGdmlFile::process(const std::string &outputFilename, const std::vector
 	for(std::vector<std::string>::const_iterator iter = filenames.begin(); iter != filenames.end(); iter++){
 		processFile((*iter));
 	}
+
+	// Compute the physical size of the solid.
+	size_t nPoly = 0;
+	for(std::vector<gdmlEntry>::iterator iter = goodFiles.begin(); iter != goodFiles.end(); iter++){
+		double solidmin[3], solidmax[3];
+		iter->solid.getSizeX(solidmin[0], solidmax[0]);
+		iter->solid.getSizeY(solidmin[1], solidmax[1]);
+		iter->solid.getSizeZ(solidmin[2], solidmax[2]);
 	
-	// Identify shared polygons.
-	if(debug) std::cout << "debug: goodFiles.size()=" << goodFiles.size() << std::endl;
-	for(std::vector<gdmlEntry>::iterator iter1 = goodFiles.begin(); iter1 != goodFiles.end(); iter1++){
-		for(std::vector<gdmlEntry>::iterator iter2 = iter1; iter2 != goodFiles.end(); iter2++){
-			if(iter1 == iter2) continue; // Do not compare with itself.
-			iter1->solid.compare(iter2->solid);
+		// Get the physical size of the solid.
+		threeTuple physicalSize = threeTuple(solidmax[0]-solidmin[0], solidmax[1]-solidmin[1], solidmax[2]-solidmin[2]);
+	
+		for(size_t i = 0; i < 3; i++){
+			rmin[i]	= std::min(rmin[i], solidmin[i]); 
+			rmax[i] = std::max(rmax[i], solidmax[i]);
 		}
+		
+		iter->physSize = physicalSize;
+		nPoly += iter->solid.size();
 	}	
+
+	// Compute the size of the world.
+	for(size_t i = 0; i < 3; i++){
+		worldSize[i] = rmax[i]-rmin[i];
+	}
+
+	std::cout << " Successfully loaded " << goodFiles.size() << " geometries and a total of " << nPoly << " polygons.\n";
+
+	if(debug)
+		std::cout << "debug: worldX=" << worldSize[0] << " mm, worldY=" << worldSize[1] << " mm, worldZ=" << worldSize[2] << " mm\n";
+	
+	for(std::vector<gdmlEntry>::iterator iter = goodFiles.begin(); iter != goodFiles.end(); iter++){
+		iter->computeOffset(worldSize[0], worldSize[1], worldSize[2]);
+		if(debug)
+			std::cout << "debug: offsetX=" << iter->offset.p[0] << " mm, offsetY=" << iter->offset.p[1] << " mm, offsetZ=" << iter->offset.p[2] << " mm\n";
+		
+		// Offset all polygons so that the origin is at the center. 
+		iter->solid.addOffset(iter->offset);
+
+		// Identify unique vertices.
+		iter->solid.getUniqueVertices(uniqueVert, solidCount++);
+
+		// Match all facet vertices with one of the unique vertices.
+		for(std::vector<facet>::iterator poly = iter->solid.begin(); poly != iter->solid.end(); poly++){	
+			for(size_t i = 0; i < 3; i++){
+				for(size_t j = 0; j < uniqueVert.size(); j++){
+					if(poly->vertices[i] == uniqueVert[j]){
+						poly->names[i] = uniqueVert[j].name;
+						break;
+					}
+				}
+			}
+		}
+		
+		// Identify unique polygons.
+		iter->solid.getUniquePolygons(uniquePoly, iter->offset);
+	}	
+
+	std::cout << "  Identified " << uniqueVert.size() << " unique vertices and " << uniquePoly.size() << " unique polygons.\n";
+
+	// Generate the union solid.
+	std::string masterSolidName;
+	std::string masterObjectFilename;
+	std::string extension;
+	
+	splitFilename(outputFilename, masterSolidName, masterObjectFilename, extension);
+	masterObjectFilename += "_geom.gdml";
+
+	// Copy the unique polys into the union.	
+	gdmlEntry entry(masterObjectFilename, masterSolidName, threeTuple(worldSize[0], worldSize[1], worldSize[2]));
+	for(std::vector<facet>::iterator poly = uniquePoly.begin(); poly != uniquePoly.end(); poly++){
+		entry.solid.add((*poly));
+	}
+	entry.computeOffset(worldSize[0], worldSize[1], worldSize[2]);
+	//goodFiles.push_back(entry); // This geometry does not work currently. Do not write it to the output.
 
 	// Write the files.
 	for(std::vector<gdmlEntry>::iterator iter = goodFiles.begin(); iter != goodFiles.end(); iter++){
-		solid = &iter->solid;
 		writeGeometry((*iter));
 	}
-		
+	
+	// Write the parent file.
 	generateMasterFile(outputFilename);
 	
 	return true;
 }
-		
+	
 bool geantGdmlFile::processFile(const std::string &filename){
 	std::string solidName = "Thingy";
 	std::string gdmlFilename = filename;
 	std::string extension = "";
-	size_t index = filename.find_last_of('.');
-	if(index != std::string::npos){
-		solidName = filename.substr(0, index);
-		gdmlFilename = filename.substr(0, index) + ".gdml";
-		extension = filename.substr(index+1);
-	}
-		
-	index = solidName.find_last_of('/');
-	if(index != std::string::npos){
-		solidName = solidName.substr(index+1);
-	}
+	
+	// Get the solid name and file extension from the filename.
+	splitFilename(filename, solidName, gdmlFilename, extension);
+	
+	// Get the output gdml filename.
+	gdmlFilename += ".gdml";
 		
 	std::cout << " Processing file \"" << filename << "\", solid=" << solidName << "\n";
 
 	gdmlEntry entry(gdmlFilename, solidName, threeTuple());
 	
 	if(extension == "stl"){ // Binary STL file
-		readSTL(filename.c_str(), entry, solid, drawingUnit);
-		std::cout << "  Read " << solid->size() << " polygons\n";
+		readSTL(filename.c_str(), entry, drawingUnit);
+		std::cout << "  Read " << entry.solid.size() << " polygons\n";
 	}
 	else{ // Ascii STL file
 		if(extension != "ast")
 			std::cout << " Warning: Unknown file type (" << extension << "), assuming AST format.\n";
-		unsigned int lines = readAST(filename.c_str(), entry, solid, drawingUnit);
-		std::cout << "  Read " << lines << " lines and " << solid->size() << " polygons\n";
+		unsigned int lines = readAST(filename.c_str(), entry, drawingUnit);
+		std::cout << "  Read " << lines << " lines and " << entry.solid.size() << " polygons\n";
 	}
 	
-	threeTuple physicalSize;
-	std::cout << "  Identified " << generateUniqueVertices(solidName, physicalSize) << " unique vertices\n";
-	
 	if(debug){
-		std::vector<ySlice> *slices = solid->getSlices();
+		std::vector<ySlice> *slices = entry.solid.getSlices();
 		std::cout << "debug: slices->size()=" << slices->size() << std::endl;
 		for(size_t i = 0; i < slices->size(); i++){
 			if(!slices->at(i).empty()){
@@ -174,7 +243,6 @@ bool geantGdmlFile::processFile(const std::string &filename){
 		}
 	}
 	
-	entry.physSize = physicalSize;
 	goodFiles.push_back(entry);
 	
 	return true;
@@ -190,7 +258,7 @@ bool geantGdmlFile::writeGeometry(const gdmlEntry &entry){
 
 	ofile << "    <define>\n";
 	for(size_t i = 0; i < uniqueVert.size(); i++){ // Write vertex position definitions.
-		for(std::vector<facet>::iterator iter = solid->begin(); iter != solid->end(); iter++){
+		for(std::vector<facet>::const_iterator iter = entry.solid.cbegin(); iter != entry.solid.cend(); iter++){
 			if(iter->usesVertex(uniqueVert[i].name)){
 				ofile << "             " << uniqueVert[i].print() << std::endl;
 				break;
@@ -203,7 +271,7 @@ bool geantGdmlFile::writeGeometry(const gdmlEntry &entry){
 	ofile << "        <tessellated aunit=\"deg\" lunit=\"mm\" name=\"" << entry.solidName << "\">\n";
 
 	// Print the triangular definitions to the output file.
-	for(std::vector<facet>::iterator iter = solid->begin(); iter != solid->end(); iter++){
+	for(std::vector<facet>::const_iterator iter = entry.solid.cbegin(); iter != entry.solid.cend(); iter++){
 		if(!iter->checkNames()){
 			std::cout << " ERROR\n";
 		}
@@ -236,37 +304,6 @@ bool geantGdmlFile::writeGeometry(const gdmlEntry &entry){
 	return true;
 }
 
-unsigned int geantGdmlFile::generateUniqueVertices(const std::string &name, threeTuple &size){
-	solid->getUniqueVertices(uniqueVert, solidCount++);
-	
-	// Get the physical size of the solid->
-	double solidmin[3], solidmax[3];
-	solid->getSizeX(solidmin[0], solidmax[0]);
-	solid->getSizeY(solidmin[1], solidmax[1]);
-	solid->getSizeZ(solidmin[2], solidmax[2]);
-	
-	size = threeTuple(solidmax[0]-solidmin[0], solidmax[1]-solidmin[1], solidmax[2]-solidmin[2]);
-	
-	for(size_t i = 0; i < 3; i++){
-		rmin[i]	= std::min(rmin[i], solidmin[i]); 
-		rmax[i] = std::max(rmax[i], solidmax[i]);
-	}
-
-	// Match all facet vertices with one of the unique vertices.
-	for(std::vector<facet>::iterator iter = solid->begin(); iter != solid->end(); iter++){	
-		for(size_t i = 0; i < 3; i++){
-			for(size_t j = 0; j < uniqueVert.size(); j++){
-				if(iter->vertices[i] == uniqueVert[j]){
-					iter->names[i] = uniqueVert[j].name;
-					break;
-				}
-			}
-		}
-	}
-	
-	return uniqueVert.size();
-}
-
 bool geantGdmlFile::generateMasterFile(const std::string &outputFilename){ // Generate the master file.
 	std::ofstream masterFile(outputFilename.c_str());
 	if(!masterFile.good())
@@ -294,18 +331,20 @@ bool geantGdmlFile::generateMasterFile(const std::string &outputFilename){ // Ge
 	masterFile << "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"no\" ?>\n";
 	masterFile << "<gdml xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" xsi:noNamespaceSchemaLocation=\"http://service-spi.web.cern.ch/service-spi/app/releases/GDML/schema/gdml.xsd\">\n\n";
 	
-	double worldSize[3];
-	for(size_t i = 0; i < 3; i++){
-		worldSize[i] = rmax[i]-rmin[i];
-	}
-	
 	masterFile << "    <define>\n";
-	for(std::vector<gdmlEntry>::iterator iter = goodFiles.begin(); iter != goodFiles.end(); iter++){ // Positions
+	/*for(size_t i = 0; i < uniqueVert.size(); i++){ // Write vertex position definitions.
+		for(std::vector<facet>::iterator iter = uniquePoly.begin(); iter != uniquePoly.end(); iter++){
+			if(iter->usesVertex(uniqueVert[i].name)){
+				masterFile << "        " << uniqueVert[i].print() << std::endl;
+				break;
+			}
+		}
+	}*/
+	for(std::vector<gdmlEntry>::iterator iter = goodFiles.begin(); iter != goodFiles.end(); iter++){ // Daughter positions (currently un-used).
 		// <position name="offsetpos" unit="mm" x="19" y="0" z="19"/>
-		iter->computeOffset(worldSize[0], worldSize[1], worldSize[2]);
 		masterFile << "        <position name=\"" << iter->solidName << ".gdml_pos\" unit=\"mm\" x=\"" << iter->offset.p[0] << "\" y=\"" << iter->offset.p[1] << "\" z=\"" << iter->offset.p[2] << "\"/>\n";
 	}
-	for(std::vector<gdmlEntry>::iterator iter = goodFiles.begin(); iter != goodFiles.end(); iter++){ // Rotations
+	for(std::vector<gdmlEntry>::iterator iter = goodFiles.begin(); iter != goodFiles.end(); iter++){ // Daughter rotations (currently un-used).
 		// <rotation name="offsetpos" unit="deg" x="0" y="0" z="0"/>
 		masterFile << "        <rotation name=\"" << iter->solidName << ".gdml_rot\" unit=\"deg\" x=\"0\" y=\"0\" z=\"0\"/>\n";
 	}
@@ -313,6 +352,16 @@ bool geantGdmlFile::generateMasterFile(const std::string &outputFilename){ // Ge
 	
 	masterFile << "    <solids>\n";
 	masterFile << "        <box lunit=\"mm\" name=\"" << objName << "_solid\" x=\"" << worldSize[0] << "\" y=\"" << worldSize[1] << "\" z=\"" << worldSize[2] << "\"/>\n";
+	/*masterFile << "        <tessellated aunit=\"deg\" lunit=\"mm\" name=\"" << objName << "_solid\">\n";
+	for(std::vector<facet>::iterator iter = uniquePoly.begin(); iter != uniquePoly.end(); iter++){ // Print the triangular definitions to the output file.
+		if(!iter->checkNames()){
+			std::cout << " ERROR\n";
+		}
+		else{
+			masterFile << "             " << iter->print() << std::endl;
+		}
+	}
+	masterFile << "        </tessellated>\n";*/
 	masterFile << "    </solids>\n\n";
 
 	masterFile << "    <structure>\n";

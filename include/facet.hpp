@@ -26,6 +26,8 @@ class facet : public stlBlock {
 	
 	bool usesVertex(const std::string &vertexName) const ;
 	
+	bool compare(const facet &other, const threeTuple &offset) const ;
+	
 	std::string print() const ;
 };
 

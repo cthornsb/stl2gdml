@@ -1,3 +1,5 @@
+#include <iostream>
+
 #include "stlBlock.hpp"
 
 stlBlock::stlBlock(float *array, const unsigned short &att/*=0*/){
@@ -8,10 +10,30 @@ stlBlock::stlBlock(float *array, const unsigned short &att/*=0*/){
 	attribute = att;
 }
 
+void stlBlock::addOffset(const threeTuple &offset){
+	for(size_t i = 0; i < 3; i++){
+		vertices[i] = vertices[i] + offset;
+	}
+}
+
 void stlBlock::operator *= (const double &val){
 	for(size_t i = 0; i < 3; i++){
 		vertices[i] *= val;
 	}
+}
+
+bool stlBlock::operator == (const stlBlock &other) const {
+	bool validMatch[3] = {false, false, false};
+	for(size_t i = 0; i < 3; i++){
+		for(size_t j = 0; j < 3; j++){
+			//std::cout << vertices[i].dist(other.vertices[j]) << " mm\n";
+			if(vertices[i].dist(other.vertices[j]) == 0){
+				validMatch[i] = true;
+				break;
+			}
+		}
+	}
+	return (validMatch[0] && validMatch[1] && validMatch[2]);
 }
 
 bool stlBlock::compare(const stlBlock &other) const {

@@ -6,6 +6,14 @@
 #include "ySlice.hpp"
 #include "facet.hpp"
 
+template <typename T>
+bool isInVector(const T &val, const std::vector<T> &vec){
+	for(typename std::vector<T>::const_iterator iter = vec.begin(); iter != vec.end(); iter++){	
+		if(val == (*iter)) return true;
+	}
+	return false;
+}
+
 class polySolid{
   public:
 	polySolid(){ initialize(); }
@@ -18,20 +26,26 @@ class polySolid{
 
 	void getSizeZ(double &min, double &max) const ;
 
-	void getUniqueVertices(std::vector<threeTuple> &unique, const int &id);
+	void getUniqueVertices(std::vector<threeTuple> &unique, const int &id) const ;
+	
+	void getUniquePolygons(std::vector<facet> &unique, const threeTuple &offset) const ;
 	
 	std::vector<ySlice> *getSlices(){ return &slices; }
 	
+	std::vector<facet>::const_iterator cbegin() const { return solid.cbegin(); }
+	
+	std::vector<facet>::const_iterator cend() const { return solid.cend(); }
+
 	std::vector<facet>::iterator begin(){ return solid.begin(); }
 	
 	std::vector<facet>::iterator end(){ return solid.end(); }
 	
 	void add(const facet &poly);
 	
+	void addOffset(const threeTuple &offset);
+	
 	void clear();
 	
-	void compare(polySolid &other);
-  
   private:
 	std::vector<facet> solid;
 	std::vector<ySlice> slices; // Bounding box for each y-slice of the model.
@@ -40,8 +54,6 @@ class polySolid{
 	double rmax[3];
 	
 	void initialize();
-	
-	bool isInVector(const threeTuple &tuple, const std::vector<threeTuple> &vec);
 	
 	bool isInSlices(const double &y, std::vector<ySlice>::iterator &iter);
 };
