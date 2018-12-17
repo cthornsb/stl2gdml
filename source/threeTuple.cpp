@@ -1,3 +1,4 @@
+#include <iomanip>
 #include <sstream>
 #include <cmath>
 
@@ -27,9 +28,9 @@ threeTuple threeTuple::operator - (const threeTuple &other) const {
 	return threeTuple(p[0]-other.p[0], p[1]-other.p[1], p[2]-other.p[2]);
 }
 
-std::string threeTuple::print() const {
-	std::stringstream stream;
-	stream << "<position name=\"" << name << "\" unit=\"mm\" x=\"" << p[0] << "\" y=\"" << p[1] << "\" z=\"" << p[2] << "\"/>";
+std::string threeTuple::print(const int &precision/*=4*/) const {
+	std::stringstream stream; 
+	stream << std::setprecision(precision) << "<position name=\"" << name << "\" unit=\"mm\" x=\"" << p[0] << "\" y=\"" << p[1] << "\" z=\"" << p[2] << "\"/>";
 	return stream.str();
 }
 

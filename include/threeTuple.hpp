@@ -23,7 +23,9 @@ class threeTuple{
 
 	threeTuple operator - (const threeTuple &other) const ;
 	
-	std::string print() const ;
+	double operator [] (const size_t &index) const { return p[index]; }
+	
+	std::string print(const int &precision=4) const ;
 	
 	double length() const ;	
 	

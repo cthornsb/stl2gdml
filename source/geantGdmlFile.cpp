@@ -1,5 +1,8 @@
 #include <iostream>
+#include <sstream>
+#include <iomanip>
 #include <fstream>
+#include <cmath>
 
 #include "geantGdmlFile.hpp"
 #include "polySolid.hpp"
@@ -161,6 +164,9 @@ bool geantGdmlFile::process(const std::string &outputFilename, const std::vector
 
 		// Identify unique vertices.
 		iter->solid.getUniqueVertices(uniqueVert, solidCount++);
+		
+		if(debug)
+			std::cout << "debug: uniqueVert.size()=" << uniqueVert.size() << std::endl;
 
 		// Match all facet vertices with one of the unique vertices.
 		for(std::vector<facet>::iterator poly = iter->solid.begin(); poly != iter->solid.end(); poly++){	
@@ -176,9 +182,37 @@ bool geantGdmlFile::process(const std::string &outputFilename, const std::vector
 		
 		// Identify unique polygons.
 		iter->solid.getUniquePolygons(uniquePoly, iter->offset);
+
+		if(debug){ // Output slice information.
+			std::vector<ySlice> *slices = iter->solid.getSlices();
+			std::cout << "debug: slices->size()=" << slices->size() << std::endl;
+			for(size_t i = 0; i < slices->size(); i++){
+				if(!slices->at(i).empty()){
+					std::cout << "debug:  y=" << slices->at(i).getY() << ", x=" << slices->at(i).getSizeX() << ", z=" << slices->at(i).getSizeZ() << "\n";
+				}
+			}
+		}
 	}	
 
 	std::cout << "  Identified " << uniqueVert.size() << " unique vertices and " << uniquePoly.size() << " unique polygons.\n";
+
+	// Enforce symmetry requirements.
+	double tempMin[3] = {1E10, 1E10, 1E10};
+	double tempMax[3] = {-1E10, -1E10, -1E10};	
+	for(std::vector<threeTuple>::iterator iter = uniqueVert.begin(); iter != uniqueVert.end(); iter++){
+		for(size_t j = 0; j < 3; j++){ // Over all three axes.
+			tempMin[j] = std::min(tempMin[j], iter->p[j]); 
+			tempMax[j] = std::max(tempMax[j], iter->p[j]);
+		}
+	}
+
+	for(size_t i = 0; i < 3; i++){
+		if(debug)
+			std::cout << "debug: i=" << i << ", min=" << tempMin[i] << ", max=" << tempMax[i] << ", offset=" << std::fabs(tempMax[i]+tempMin[i])*um << " microns\n";
+		if(std::fabs(tempMax[i]+tempMin[i]) >= 1E-3){ // Check for offset of more than 1 um
+			std::cout << " Warning! Axis " << i << " offset mismatch of (" << std::fabs(tempMax[i]+tempMin[i]) << " mm). Correcting...\n";
+		}
+	}
 
 	// Generate the union solid.
 	std::string masterSolidName;
@@ -233,16 +267,6 @@ bool geantGdmlFile::processFile(const std::string &filename){
 		std::cout << "  Read " << lines << " lines and " << entry.solid.size() << " polygons\n";
 	}
 	
-	if(debug){
-		std::vector<ySlice> *slices = entry.solid.getSlices();
-		std::cout << "debug: slices->size()=" << slices->size() << std::endl;
-		for(size_t i = 0; i < slices->size(); i++){
-			if(!slices->at(i).empty()){
-				std::cout << "debug:  y=" << slices->at(i).getY() << ", x=" << slices->at(i).getSizeX() << ", z=" << slices->at(i).getSizeZ() << "\n";
-			}
-		}
-	}
-	
 	goodFiles.push_back(entry);
 	
 	return true;
@@ -259,8 +283,8 @@ bool geantGdmlFile::writeGeometry(const gdmlEntry &entry){
 	ofile << "    <define>\n";
 	for(size_t i = 0; i < uniqueVert.size(); i++){ // Write vertex position definitions.
 		for(std::vector<facet>::const_iterator iter = entry.solid.cbegin(); iter != entry.solid.cend(); iter++){
-			if(iter->usesVertex(uniqueVert[i].name)){
-				ofile << "             " << uniqueVert[i].print() << std::endl;
+			if(iter->usesVertex(uniqueVert[i].name)){ // Set precision to 1E-3 (1 um)
+				ofile << "             " << uniqueVert[i].print(4) << std::endl;
 				break;
 			}
 		}

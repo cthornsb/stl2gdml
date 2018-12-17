@@ -13,6 +13,8 @@ const double m = 1000;
 const double dm = 100;
 const double cm = 10;
 const double mm = 1;
+const double um = 1E3;
+const double nm = 1E6;
 
 class polySolid;
 
@@ -44,8 +46,10 @@ class geantGdmlFile{
 	std::vector<gdmlEntry> goodFiles; // List of good gdml files.
 	
 	std::vector<threeTuple> uniqueVert; // List of unique vertices.
-	
+
 	std::vector<facet> uniquePoly; // List of unique polygons.
+
+	void getUniqueCoordinates();
 	
 	bool processFile(const std::string &filename);
 
