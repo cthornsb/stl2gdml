@@ -12,7 +12,9 @@ stlBlock::stlBlock(float *array, const unsigned short &att/*=0*/){
 
 void stlBlock::addOffset(const threeTuple &offset){
 	for(size_t i = 0; i < 3; i++){
+		//std::cout << "debug: PRE  x=" << vertices[i].p[0] << ", y=" << vertices[i].p[1] << ", z=" << vertices[i].p[2] << std::endl;
 		vertices[i] = vertices[i] + offset;
+		//std::cout << "debug: POST x=" << vertices[i].p[0] << ", y=" << vertices[i].p[1] << ", z=" << vertices[i].p[2] << std::endl;
 	}
 }
 

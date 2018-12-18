@@ -155,7 +155,7 @@ bool geantGdmlFile::process(const std::string &outputFilename, const std::vector
 		std::cout << "debug: worldX=" << worldSize[0] << " mm, worldY=" << worldSize[1] << " mm, worldZ=" << worldSize[2] << " mm\n";
 	
 	for(std::vector<gdmlEntry>::iterator iter = goodFiles.begin(); iter != goodFiles.end(); iter++){
-		iter->computeOffset(worldSize[0], worldSize[1], worldSize[2]);
+		iter->computeOffset(worldSize[0], worldSize[1], worldSize[2], debug);
 		if(debug)
 			std::cout << "debug: offsetX=" << iter->offset.p[0] << " mm, offsetY=" << iter->offset.p[1] << " mm, offsetZ=" << iter->offset.p[2] << " mm\n";
 		
@@ -227,7 +227,7 @@ bool geantGdmlFile::process(const std::string &outputFilename, const std::vector
 	for(std::vector<facet>::iterator poly = uniquePoly.begin(); poly != uniquePoly.end(); poly++){
 		entry.solid.add((*poly));
 	}
-	entry.computeOffset(worldSize[0], worldSize[1], worldSize[2]);
+	entry.computeOffset(worldSize[0], worldSize[1], worldSize[2], debug);
 	//goodFiles.push_back(entry); // This geometry does not work currently. Do not write it to the output.
 
 	// Write the files.
@@ -281,10 +281,11 @@ bool geantGdmlFile::writeGeometry(const gdmlEntry &entry){
 	ofile << "<gdml xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" xsi:noNamespaceSchemaLocation=\"http://service-spi.web.cern.ch/service-spi/app/releases/GDML/schema/gdml.xsd\">\n\n";
 
 	ofile << "    <define>\n";
+	ofile << "        <!--Geometry offset = (" << entry.offset.p[0] << ", " << entry.offset.p[1] << ", " << entry.offset.p[2] << ")-->\n";
 	for(size_t i = 0; i < uniqueVert.size(); i++){ // Write vertex position definitions.
 		for(std::vector<facet>::const_iterator iter = entry.solid.cbegin(); iter != entry.solid.cend(); iter++){
 			if(iter->usesVertex(uniqueVert[i].name)){ // Set precision to 1E-3 (1 um)
-				ofile << "             " << uniqueVert[i].print(4) << std::endl;
+				ofile << "        " << uniqueVert[i].print(4) << std::endl;
 				break;
 			}
 		}

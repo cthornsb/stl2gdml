@@ -31,6 +31,10 @@ class polySolid{
 	void getUniquePolygons(std::vector<facet> &unique, const threeTuple &offset) const ;
 	
 	std::vector<ySlice> *getSlices(){ return &slices; }
+
+	threeTuple getMinimumPoint() const { return threeTuple(rmin[0], rmin[1], rmin[2]); }
+	
+	threeTuple getMaximumPoint() const { return threeTuple(rmax[0], rmax[1], rmax[2]); }
 	
 	std::vector<facet>::const_iterator cbegin() const { return solid.cbegin(); }
 	
