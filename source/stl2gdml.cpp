@@ -11,7 +11,7 @@ void help(char * prog_name_){
 	std::cout << "    --help (-h)              | Display this dialogue.\n";
 	std::cout << "    --unit <unit>            | Specify the name of the size unit [e.g. in, ft, m, dm, cm, mm] (default is mm).\n";
 	std::cout << "    --material <name>        | Specify the material of the model (default is \"G4_AIR\").\n";
-	std::cout << "    --debug                   | Enable debug mode.\n";
+	std::cout << "    --debug                  | Enable debug mode.\n";
 }
 
 int main(int argc, char* argv[]){
