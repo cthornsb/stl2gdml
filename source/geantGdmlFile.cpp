@@ -11,17 +11,24 @@
 // splitFilename
 ///////////////////////////////////////////////////////////////////////////////
 
-void splitFilename(const std::string &filename, std::string &name, std::string &prefix, std::string &extension){
-	size_t index = filename.find_last_of('.');
+void splitFilename(const std::string &input, std::string &path, std::string &filename, std::string &extension){
+	size_t index = input.find_last_of('/');
 	if(index != std::string::npos){
-		prefix = filename.substr(0, index);
+		path = input.substr(0, index);
+		filename = input.substr(index+1);
+	}
+	else{
+		path = "";
+		filename = input;
+	}
+	index = filename.find_last_of('.');
+	if(index != std::string::npos){
 		extension = filename.substr(index+1);
+		filename = filename.substr(0, index);
 	}
-		
-	index = prefix.find_last_of('/');
-	if(index != std::string::npos){
-		name = prefix.substr(index+1);
-	}
+	else{
+		extension = "";
+	}	
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -217,13 +224,18 @@ bool geantGdmlFile::process(const std::string &outputFilename, const std::vector
 	// Generate the union solid.
 	std::string masterSolidName;
 	std::string masterObjectFilename;
+	std::string masterObjectFilepath;
 	std::string extension;
 	
-	splitFilename(outputFilename, masterSolidName, masterObjectFilename, extension);
+	// Get the solid name and file extension from the filename.
+	splitFilename(outputFilename, masterObjectFilepath, masterObjectFilename, extension);
+	
+	// Get the output gdml filename.
+	masterSolidName = masterObjectFilename;
 	masterObjectFilename += "_geom.gdml";
 
 	// Copy the unique polys into the union.	
-	gdmlEntry entry(masterObjectFilename, masterSolidName, threeTuple(worldSize[0], worldSize[1], worldSize[2]));
+	gdmlEntry entry(masterObjectFilename, masterObjectFilepath, masterSolidName, threeTuple(worldSize[0], worldSize[1], worldSize[2]));
 	for(std::vector<facet>::iterator poly = uniquePoly.begin(); poly != uniquePoly.end(); poly++){
 		entry.solid.add((*poly));
 	}
@@ -243,18 +255,23 @@ bool geantGdmlFile::process(const std::string &outputFilename, const std::vector
 	
 bool geantGdmlFile::processFile(const std::string &filename){
 	std::string solidName = "Thingy";
-	std::string gdmlFilename = filename;
-	std::string extension = "";
+	std::string gdmlFilename;
+	std::string filePath;
+	std::string extension;
 	
 	// Get the solid name and file extension from the filename.
-	splitFilename(filename, solidName, gdmlFilename, extension);
+	splitFilename(filename, filePath, gdmlFilename, extension);
 	
 	// Get the output gdml filename.
+	solidName = gdmlFilename;
 	gdmlFilename += ".gdml";
 		
 	std::cout << " Processing file \"" << filename << "\", solid=" << solidName << "\n";
 
-	gdmlEntry entry(gdmlFilename, solidName, threeTuple());
+	if(debug)
+		std::cout << "debug: filename=" << gdmlFilename << ", extension=" << extension << ", path=" << filePath << std::endl;
+
+	gdmlEntry entry(gdmlFilename, filePath, solidName, threeTuple());
 	
 	if(extension == "stl"){ // Binary STL file
 		readSTL(filename.c_str(), entry, drawingUnit);
@@ -273,7 +290,7 @@ bool geantGdmlFile::processFile(const std::string &filename){
 }
 
 bool geantGdmlFile::writeGeometry(const gdmlEntry &entry){
-	std::ofstream ofile(entry.filename.c_str());
+	std::ofstream ofile(entry.getFullFilename().c_str());
 	if(!ofile.good())
 		return false;
 	
@@ -309,16 +326,16 @@ bool geantGdmlFile::writeGeometry(const gdmlEntry &entry){
 	ofile << "    </solids>\n\n";
 	
 	ofile << "    <structure>\n";
-	ofile << "        <volume name=\"" << entry.filename << "\">\n";
+	ofile << "        <volume name=\"" << entry.solidName << "\">\n";
 	ofile << "            <materialref ref=\"" << materialName << "\"/>\n";
 	ofile << "            <solidref ref=\"" << entry.solidName << "\"/>\n";
-	ofile << "            <positionref ref=\"" << entry.filename << "_pos\"/>\n";
-	ofile << "            <rotationref ref=\"" << entry.filename << "_rot\"/>\n";
+	ofile << "            <positionref ref=\"" << entry.solidName << "_pos\"/>\n";
+	ofile << "            <rotationref ref=\"" << entry.solidName << "_rot\"/>\n";
 	ofile << "        </volume>\n";
 	ofile << "    </structure>\n\n";
 
 	ofile << "    <setup name=\"Default\" version=\"1.0\">\n";
-	ofile << "        <world ref=\"" << entry.filename << "\"/>\n";
+	ofile << "        <world ref=\"" << entry.solidName << "\"/>\n";
 	ofile << "    </setup>\n";
 	ofile << "</gdml>\n";
 	
@@ -367,11 +384,11 @@ bool geantGdmlFile::generateMasterFile(const std::string &outputFilename){ // Ge
 	}*/
 	for(std::vector<gdmlEntry>::iterator iter = goodFiles.begin(); iter != goodFiles.end(); iter++){ // Daughter positions (currently un-used).
 		// <position name="offsetpos" unit="mm" x="19" y="0" z="19"/>
-		masterFile << "        <position name=\"" << iter->filename << "_pos\" unit=\"mm\" x=\"" << iter->offset.p[0] << "\" y=\"" << iter->offset.p[1] << "\" z=\"" << iter->offset.p[2] << "\"/>\n";
+		masterFile << "        <position name=\"" << iter->solidName << "_pos\" unit=\"mm\" x=\"" << iter->offset.p[0] << "\" y=\"" << iter->offset.p[1] << "\" z=\"" << iter->offset.p[2] << "\"/>\n";
 	}
 	for(std::vector<gdmlEntry>::iterator iter = goodFiles.begin(); iter != goodFiles.end(); iter++){ // Daughter rotations (currently un-used).
 		// <rotation name="offsetpos" unit="deg" x="0" y="0" z="0"/>
-		masterFile << "        <rotation name=\"" << iter->filename << "_rot\" unit=\"deg\" x=\"0\" y=\"0\" z=\"0\"/>\n";
+		masterFile << "        <rotation name=\"" << iter->solidName << "_rot\" unit=\"deg\" x=\"0\" y=\"0\" z=\"0\"/>\n";
 	}
 	masterFile << "    </define>\n\n";
 	
@@ -398,7 +415,7 @@ bool geantGdmlFile::generateMasterFile(const std::string &outputFilename){ // Ge
 		// <file name="/path/to/file/file.gdml"/>
 		// <positionref ref="position"/>
 		masterFile << "            <physvol>\n";
-		masterFile << "                <file name=\"" << iter->filename << "\"/>\n";
+		masterFile << "                <file name=\"" << iter->getFullFilename() << "\"/>\n";
 		masterFile << "            </physvol>\n\n";
 	}
 	
