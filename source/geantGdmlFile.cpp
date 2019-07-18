@@ -232,23 +232,34 @@ bool geantGdmlFile::process(const std::string &outputFilename, const std::vector
 	
 	// Get the output gdml filename.
 	masterSolidName = masterObjectFilename;
-	masterObjectFilename += "_geom.gdml";
+	masterObjectFilename += ".gdml";
+
+	if(debug){
+		std::cout << "debug: master output -\n";
+		std::cout << "debug:  filename=" << masterObjectFilename << ", extension=" << extension << ", path=" << masterObjectFilepath << std::endl;
+	}
 
 	// Copy the unique polys into the union.	
-	gdmlEntry entry(masterObjectFilename, masterObjectFilepath, masterSolidName, threeTuple(worldSize[0], worldSize[1], worldSize[2]));
+	gdmlEntry masterEntry(masterObjectFilename, masterObjectFilepath, masterSolidName, threeTuple(worldSize[0], worldSize[1], worldSize[2]));
 	for(std::vector<facet>::iterator poly = uniquePoly.begin(); poly != uniquePoly.end(); poly++){
-		entry.solid.add((*poly));
+		masterEntry.solid.add((*poly));
 	}
-	entry.computeOffset(worldSize[0], worldSize[1], worldSize[2], debug);
-	//goodFiles.push_back(entry); // This geometry does not work currently. Do not write it to the output.
+	masterEntry.computeOffset(worldSize[0], worldSize[1], worldSize[2], debug);
 
 	// Write the files.
+	bool matchingObjectNames = false;
 	for(std::vector<gdmlEntry>::iterator iter = goodFiles.begin(); iter != goodFiles.end(); iter++){
+		if(iter->solidName == masterEntry.solidName)
+			matchingObjectNames = true;
 		writeGeometry((*iter));
 	}
 	
+	// Check for objects with names matching the parent object
+	if(matchingObjectNames)
+		masterEntry.solidName += "_p";
+	
 	// Write the parent file.
-	generateMasterFile(outputFilename);
+	generateMasterFile(masterEntry);
 	
 	return true;
 }
@@ -346,42 +357,15 @@ bool geantGdmlFile::writeGeometry(const gdmlEntry &entry){
 	return true;
 }
 
-bool geantGdmlFile::generateMasterFile(const std::string &outputFilename){ // Generate the master file.
-	std::ofstream masterFile(outputFilename.c_str());
+bool geantGdmlFile::generateMasterFile(const gdmlEntry &entry){ // Generate the master file.
+	std::ofstream masterFile(entry.getFullFilename().c_str());
 	if(!masterFile.good())
 		return false;
 	
-	std::string objName;
-	size_t index1, index2;
-	index1 = outputFilename.find_last_of('/');
-	index2 = outputFilename.find_last_of('.');
-	
-	// Get the object name from the output path.
-	if(index1 != std::string::npos){
-		if(index2 != std::string::npos)
-			objName = outputFilename.substr(index1+1, index2-(index1+1));
-		else
-			objName = outputFilename.substr(index1+1);
-	}
-	else{
-		if(index2 != std::string::npos)
-			objName = outputFilename.substr(0, index2);
-		else
-			objName = outputFilename;
-	}
-		
 	masterFile << "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"no\" ?>\n";
 	masterFile << "<gdml xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" xsi:noNamespaceSchemaLocation=\"http://service-spi.web.cern.ch/service-spi/app/releases/GDML/schema/gdml.xsd\">\n\n";
 	
 	masterFile << "    <define>\n";
-	/*for(size_t i = 0; i < uniqueVert.size(); i++){ // Write vertex position definitions.
-		for(std::vector<facet>::iterator iter = uniquePoly.begin(); iter != uniquePoly.end(); iter++){
-			if(iter->usesVertex(uniqueVert[i].name)){
-				masterFile << "        " << uniqueVert[i].print() << std::endl;
-				break;
-			}
-		}
-	}*/
 	for(std::vector<gdmlEntry>::iterator iter = goodFiles.begin(); iter != goodFiles.end(); iter++){ // Daughter positions (currently un-used).
 		// <position name="offsetpos" unit="mm" x="19" y="0" z="19"/>
 		masterFile << "        <position name=\"" << iter->solidName << "_pos\" unit=\"mm\" x=\"" << iter->offset.p[0] << "\" y=\"" << iter->offset.p[1] << "\" z=\"" << iter->offset.p[2] << "\"/>\n";
@@ -393,23 +377,13 @@ bool geantGdmlFile::generateMasterFile(const std::string &outputFilename){ // Ge
 	masterFile << "    </define>\n\n";
 	
 	masterFile << "    <solids>\n";
-	masterFile << "        <box lunit=\"mm\" name=\"" << objName << "_solid\" x=\"" << worldSize[0] << "\" y=\"" << worldSize[1] << "\" z=\"" << worldSize[2] << "\"/>\n";
-	/*masterFile << "        <tessellated aunit=\"deg\" lunit=\"mm\" name=\"" << objName << "_solid\">\n";
-	for(std::vector<facet>::iterator iter = uniquePoly.begin(); iter != uniquePoly.end(); iter++){ // Print the triangular definitions to the output file.
-		if(!iter->checkNames()){
-			std::cout << " ERROR\n";
-		}
-		else{
-			masterFile << "             " << iter->print() << std::endl;
-		}
-	}
-	masterFile << "        </tessellated>\n";*/
+	masterFile << "        <box lunit=\"mm\" name=\"" << entry.solidName << "_solid\" x=\"" << worldSize[0] << "\" y=\"" << worldSize[1] << "\" z=\"" << worldSize[2] << "\"/>\n";
 	masterFile << "    </solids>\n\n";
 
 	masterFile << "    <structure>\n";
-	masterFile << "        <volume name=\"" << objName << "\">\n";
+	masterFile << "        <volume name=\"" << entry.solidName << "\">\n";
 	masterFile << "            <materialref ref=\"G4_AIR\"/>\n";
-	masterFile << "            <solidref ref=\"" << objName << "_solid\"/>\n\n";
+	masterFile << "            <solidref ref=\"" << entry.solidName << "_solid\"/>\n\n";
 	
 	for(std::vector<gdmlEntry>::iterator iter = goodFiles.begin(); iter != goodFiles.end(); iter++){
 		// <file name="/path/to/file/file.gdml"/>
@@ -423,7 +397,7 @@ bool geantGdmlFile::generateMasterFile(const std::string &outputFilename){ // Ge
 	masterFile << "    </structure>\n\n";
 
 	masterFile << "    <setup name=\"Default\" version=\"1.0\">\n";
-	masterFile << "        <world ref=\"" << objName << "\"/>\n";
+	masterFile << "        <world ref=\"" << entry.solidName << "\"/>\n";
 	masterFile << "    </setup>\n";
 	masterFile << "</gdml>\n";
 	

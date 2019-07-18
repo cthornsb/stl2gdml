@@ -55,7 +55,7 @@ class geantGdmlFile{
 
 	bool writeGeometry(const gdmlEntry &entry);
 
-	bool generateMasterFile(const std::string &outputFilename);
+	bool generateMasterFile(const gdmlEntry &entry);
 };
 
 #endif
